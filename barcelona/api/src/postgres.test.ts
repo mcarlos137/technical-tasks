@@ -5,9 +5,9 @@ import pg from 'pg';
 import { JsonGamesRepository, PostgresGamesRepository, READ_ONLY_SESSION } from './repository.js';
 import type { GamesFilter } from './domain.js';
 
-// Runs when DATABASE_URL is set (for example from .env after `docker compose up -d`).
+// Optional: runs only when DATABASE_URL is set (README: "Optional: PostgreSQL instead of the JSON file").
 const url = process.env.DATABASE_URL;
-const skip = url ? false : 'DATABASE_URL is not set; start PostgreSQL with `docker compose up -d`';
+const skip = url ? false : 'optional PostgreSQL test; runs when DATABASE_URL is set (README: Optional: PostgreSQL)';
 
 const FILTERS: GamesFilter[] = [
   {},

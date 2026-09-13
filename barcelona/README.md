@@ -47,7 +47,7 @@ Each block starts from this folder (`barcelona/`). The last command in each step
 ```bash
 cd api
 npm install
-npm test                      # filtering, validation and GraphiQL examples
+npm test                      # filtering, validation and GraphiQL examples; the 2 optional PostgreSQL tests are skipped
 npm start                     # keeps running: http://localhost:4000/graphql  (GraphiQL opens with example queries)
 ```
 
@@ -78,6 +78,7 @@ flutter run -d chrome   # keeps running; swap chrome for any device id from flut
 ```
 
 Pass `-d`: with several devices connected, a bare `flutter run` stops to ask which one to use.
+In Chrome the app fills a desktop-wide window. For the phone layout, narrow the window or turn on device mode in Chrome DevTools.
 
 The app calls `http://localhost:4000/graphql`, or `http://10.0.2.2:4000/graphql` on the Android emulator.
 Override it with `--dart-define=GAMES_API_URL=http://<host>:4000/graphql`, for example on a physical device.
@@ -121,7 +122,7 @@ cd api
 docker compose up -d --wait   # creates PostgreSQL 17 on 127.0.0.1:5433; database, user and password are all "games"
 docker compose exec db psql -U games -d games -c 'select count(*) from games'   # prints 19
 cp .env.example .env          # sets DATABASE_URL to that database
-npm test                      # now also runs the 2 PostgreSQL parity tests
+npm test                      # now also runs the 2 PostgreSQL tests: parity with the JSON file, and read-only sessions
 npm start                     # keeps running: same URL, same answers
 ```
 
