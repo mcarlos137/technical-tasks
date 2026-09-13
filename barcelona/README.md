@@ -39,7 +39,7 @@ The API explorer is running the same "tomorrow morning" query the agent sends.
 ## How to run
 
 Run the parts in order: create the database, start the API, then run the app and the agent, which both call the API.
-Each block starts from this folder (`barcelona/`). The API and the agent are servers, so give each its own terminal.
+Each block starts from this folder (`barcelona/`). The last command in steps 2, 3 and 4 keeps running, so give each of those steps its own terminal.
 
 ### 1. Database (create it first)
 
@@ -67,8 +67,8 @@ If you don't have Docker, skip this step and the `cp` line in step 2. With no `D
 cd api
 npm install
 cp .env.example .env          # DATABASE_URL points at the database from step 1
-npm start                     # http://localhost:4000/graphql  (GraphiQL opens with example queries)
 npm test                      # filtering, validation and GraphiQL examples, plus PostgreSQL parity when DATABASE_URL is set
+npm start                     # keeps running: http://localhost:4000/graphql  (GraphiQL opens with example queries)
 ```
 
 The startup log names the source: `PostgreSQL at localhost:5433/games` followed by `PostgreSQL connected: 19 games`.
@@ -90,10 +90,13 @@ Then run the app:
 ```bash
 cd app
 flutter pub get
-flutter run          # iOS simulator, Android emulator, Chrome or macOS
-flutter build web    # static site in build/web, which any static file server can serve
 flutter test         # widget + unit tests (no API needed, uses an in-memory fake)
+flutter build web    # static site in build/web, which any static file server can serve
+flutter devices      # lists the iOS simulators, Android emulators, Chrome and macOS you can run on
+flutter run -d <id>  # keeps running; <id> comes from flutter devices, e.g. chrome
 ```
+
+Pass `-d`: with several devices connected, a bare `flutter run` stops to ask which one to use.
 
 The app calls `http://localhost:4000/graphql`, or `http://10.0.2.2:4000/graphql` on the Android emulator.
 Override it with `--dart-define=GAMES_API_URL=http://<host>:4000/graphql`, for example on a physical device.
@@ -104,13 +107,15 @@ Override it with `--dart-define=GAMES_API_URL=http://<host>:4000/graphql`, for e
 cd agent
 npm install
 cp .env.example .env # then paste a free key from https://aistudio.google.com/apikey into GEMINI_API_KEY
-npm start            # chat UI at http://localhost:3001
 npm test             # date-resolution + agent-loop tests (no key needed)
-npm run eval         # runs the 5 required conversations against Gemini and checks them
-npm run eval -- --report eval.md   # same, and writes the transcript as Markdown
+npm run eval -- --report eval.md   # runs the 5 required conversations against Gemini, checks them and writes eval.md
+npm start            # keeps running: chat UI at http://localhost:3001
 ```
 
-The server starts without a key too. The chat then replies with setup instructions instead of calling the model.
+The eval needs the API from step 2 but not the chat server. Run it once: each run spends about 12 free requests.
+Leave out `-- --report eval.md` to print the results without writing the file.
+
+The chat server starts without a key too. The chat then replies with setup instructions instead of calling the model.
 
 `GEMINI_MODEL` defaults to `gemini-flash-lite-latest`, the alias Google keeps pointed at its current Flash Lite model.
 On 13 Sep 2026 it served Gemini 3.5 Flash Lite. Flash Lite is the default because the free tier gives it far more room:
