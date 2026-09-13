@@ -1,4 +1,4 @@
-// Generates supabase/migrations/0002_seed_games.sql from data/games.json
+// Generates db/migrations/0002_seed_games.sql from data/games.json
 // so both data sources always hold identical content.
 import { loadSeed } from './repository.js';
 

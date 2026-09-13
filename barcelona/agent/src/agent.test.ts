@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Content } from '@google/genai';
-import { runAgentTurn, type ModelClient } from './agent.js';
+import { ApiError, type Content } from '@google/genai';
+import { describeModelError, runAgentTurn, type ModelClient } from './agent.js';
 
 /** Scripted model: first asks for a tool, then answers from the tool result it was given. */
 function scriptedModel(steps: Array<(contents: Content[]) => any>): ModelClient & { calls: Content[][] } {
@@ -54,4 +54,63 @@ test('stops after too many tool rounds instead of looping forever', async () => 
   const turn = await runAgentTurn(model, [], 'hi', { systemInstruction: 't', runTool: async () => ({ venues: [] }) });
   assert.match(turn.reply, /too many tool calls/);
   assert.ok(model.calls.length <= 7);
+});
+
+/** A 429 shaped like Gemini's: the quota that ran out, plus how long to wait. */
+function quotaError(quotaId: string): ApiError {
+  const body = { error: { code: 429, details: [
+    { '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaId }] },
+    { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '8s' },
+  ] } };
+  return new ApiError({ status: 429, message: `got status: 429 Too Many Requests. ${JSON.stringify(body)}` });
+}
+const perMinute = () => quotaError('GenerateRequestsPerMinutePerProjectPerModel-FreeTier');
+const perDay = () => quotaError('GenerateRequestsPerDayPerProjectPerModel-FreeTier');
+const answer = (text: string) => ({ candidates: [{ content: { role: 'model', parts: [{ text }] } }], text });
+
+test('a per-minute 429 waits as long as Gemini asks, then retries', async () => {
+  const model = scriptedModel([() => { throw perMinute(); }, () => answer('No games that day.')]);
+  const waits: number[] = [];
+  const turn = await runAgentTurn(model, [], 'games on 5 Sep?', {
+    systemInstruction: 't',
+    sleep: async (ms) => { waits.push(ms); },
+  });
+  assert.equal(turn.reply, 'No games that day.');
+  assert.deepEqual(waits, [8000]);
+});
+
+test('the daily limit fails at once and rolls the half-finished turn back', async () => {
+  const history: Content[] = [
+    { role: 'user', parts: [{ text: 'hi' }] },
+    { role: 'model', parts: [{ text: 'Hello!' }] },
+  ];
+  const before = structuredClone(history);
+  const model = scriptedModel([
+    () => ({
+      candidates: [{ content: { role: 'model', parts: [{ functionCall: { id: 'c1', name: 'search_games', args: {} } }] } }],
+      functionCalls: [{ id: 'c1', name: 'search_games', args: {} }],
+    }),
+    () => { throw perDay(); },
+  ]);
+  const waits: number[] = [];
+  await assert.rejects(
+    runAgentTurn(model, history, 'games tomorrow?', {
+      systemInstruction: 't',
+      runTool: async () => ({ total_count: 0 }),
+      sleep: async (ms) => { waits.push(ms); },
+    }),
+    ApiError,
+  );
+  assert.deepEqual(waits, [], 'no point waiting for a quota that refills at midnight Pacific');
+  assert.equal(model.calls.length, 2);
+  assert.deepEqual(history, before, 'the next question starts from a clean session');
+});
+
+test('describeModelError explains quota and overload errors and leaves the rest alone', () => {
+  assert.match(describeModelError(perDay())!.error, /used up for today/);
+  assert.equal(describeModelError(perDay())!.status, 429);
+  assert.match(describeModelError(perMinute())!.error, /per minute/);
+  assert.equal(describeModelError(new ApiError({ status: 503, message: 'high demand' }))!.status, 503);
+  assert.equal(describeModelError(new ApiError({ status: 400, message: 'bad request' })), null);
+  assert.equal(describeModelError(new Error('fetch failed')), null);
 });

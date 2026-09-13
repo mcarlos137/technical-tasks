@@ -4,7 +4,7 @@ Two parts built on **one** small GraphQL API:
 
 | Folder | What | Stack |
 |---|---|---|
-| [`api/`](api) | Games GraphQL API (mock data behind it) | Node 20+, TypeScript, graphql-yoga |
+| [`api/`](api) | Games GraphQL API over the mock data | Node 20+, TypeScript, graphql-yoga, PostgreSQL 17 (or the JSON file) |
 | [`app/`](app) | Explore home + Pick-up games list | Flutter 3.44.8, `graphql` client |
 | [`agent/`](agent) | Minimal chat agent with the API exposed as tools | Node 20+, Google Gemini (`@google/genai`) |
 
@@ -19,6 +19,7 @@ The Flutter screens and the agent both read from the same API, which serves `api
 |---|---|---|
 | **iOS simulator** | <img src="docs/screenshots/explore-home.png" width="260"> | <img src="docs/screenshots/pickup-games.png" width="260"> |
 | **Chrome, web build** | <img src="docs/screenshots/web-explore-home.png" width="260"> | <img src="docs/screenshots/web-pickup-games.png" width="260"> |
+| **Android emulator, release build** | <img src="docs/screenshots/android-explore-home.png" width="260"> | |
 
 Every screenshot reads live from the local API. The iOS ones come from an iPhone 16 Pro simulator.
 The Chrome ones come from `flutter build web` in a phone-sized window.
@@ -41,9 +42,16 @@ The API explorer is running the same "tomorrow morning" query the agent sends.
 ```bash
 cd api
 npm install
-npm start            # http://localhost:4000/graphql  (GraphiQL in the browser)
-npm test             # unit tests for filtering/validation
+docker compose up -d --wait   # local PostgreSQL 17 on port 5433, schema and seed applied on first start
+cp .env.example .env          # DATABASE_URL points at that database
+npm start                     # http://localhost:4000/graphql  (GraphiQL opens with example queries)
+npm test                      # filtering, validation and GraphiQL examples, plus PostgreSQL parity when DATABASE_URL is set
 ```
+
+The startup log names the source: `PostgreSQL at localhost:5433/games` followed by `PostgreSQL connected: 19 games`.
+Without Docker, skip the first two steps: with no `DATABASE_URL` the API serves `data/games.json`, which holds the same data.
+Any other PostgreSQL 14 or newer also works: `psql "$DATABASE_URL" -f db/migrations/0001_games_schema.sql -f db/migrations/0002_seed_games.sql`.
+`docker compose down -v` deletes the database, so the next `up` applies the migrations again.
 
 ### 2. Flutter app
 
@@ -95,6 +103,7 @@ On 13 Sep 2026 it served Gemini 3.5 Flash Lite. Flash Lite is the default becaus
 These limits come from AI Studio's rate-limit page for this project on 13 Sep 2026, and they can differ per account.
 Each question costs about two requests, and one eval run about 12, so Flash's daily limit is used up after one or two runs.
 Set `GEMINI_MODEL=gemini-flash-latest` for the stronger model. The Gemini 2.5 models are already closed to new keys.
+[Free tier and request limits](#free-tier-and-request-limits) explains how the agent stays within these numbers.
 
 ---
 
@@ -130,7 +139,7 @@ The API is meant to be consumed by a language model, so it favors being **unambi
 6. **Derived state lives on the server.** `availability` is a closed enum of `URGENT`, `AVAILABLE` and `FULL`, computed from `spotsAvailable`, so the app and the agent can't disagree on the thresholds.
 7. **Forgiving where it is safe.** `venueName` matching ignores case and accents, so "aliga" finds "L'Àliga". `venueId` gives an exact match. Filters combine with AND.
 8. **Bounded and ordered.** Results are sorted by kick-off. The `first` argument defaults to 100, capped at 500.
-9. **Read-only.** There are no mutations, so a model driving the API cannot change anything.
+9. **Read-only.** There are no mutations, and the database sessions are read-only, so a model driving the API cannot change anything.
 
 ```graphql
 type Query {
@@ -156,7 +165,14 @@ Example:
     games { startTime venue { name } format spotsAvailable availability } } }
 ```
 
-**Data source.** By default the API serves `api/data/games.json`, which holds 19 games across 25 to 31 August at 5 venues. The repository layer also has an optional Supabase backend, used only when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set. Its schema and seed are in `api/supabase/migrations`, and `npm run seed:sql` regenerates the seed from the JSON. Both sources share the same pure filter code, so they answer identically.
+**Data source.** The API reads a local PostgreSQL when `DATABASE_URL` is set, and `api/data/games.json` otherwise. Both hold the same 19 games, from 25 to 31 August, at 5 venues.
+
+- **Schema and seed** live in `api/db/migrations`. `docker compose up -d` applies them to PostgreSQL 17, and `npm run seed:sql` regenerates the seed from the JSON.
+- **Filters run in SQL** with bound parameters.
+  - The date and time-of-day filters compare two indexed generated columns, `local_date` and `local_start_time`.
+  - Venue names match accent-insensitively through the `unaccent` extension.
+- **A parity test** runs 16 filters, every game id and the calendar against both sources, and requires identical results.
+- **API sessions are read-only** (`default_transaction_read_only`), so not even a bug can write.
 
 ---
 
@@ -171,7 +187,7 @@ The agent lives in `agent/src`: `agent.ts` runs the loop, `tools.ts` holds the t
   - Tool results come back grouped by date, and each carries a `note`. An empty result says "NO games match… say so plainly". A multi-day result says "Results span N dates… break down per day or ask".
   - API errors return to the model as structured data with a hint to fix the arguments. They never crash the loop, so the model never has to fall back to memory.
 - **Honest limits.** The prompt lists exactly which fields exist, which also tells the model what is missing: player skill, ratings, weather, facilities, booking. Questions about those get "that isn't available" instead of a guess.
-- **Retries.** The free tier often answers "rate limited" or "high demand" for a few seconds, so the Gemini client retries those errors with backoff before giving up.
+- **Quota-aware retries.** Per-minute rate limits and "high demand" errors are retried. The daily limit fails at once with a clear message, and a failed turn is rolled back. See [Free tier and request limits](#free-tier-and-request-limits).
 - **Bounded loop.** A turn allows at most 6 tool rounds. Chat sessions are kept in memory, and the UI shows each tool call and its raw result under the answer, so grounding can be audited.
 
 The required conversations and what the data makes them test:
@@ -194,6 +210,27 @@ It also checks every reply against the tool results of its conversation:
 The check lives in `agent/src/grounding.ts` and has its own unit tests.
 It was added after a run on Gemini 3.8 Flash answered the "best players" question correctly, then claimed that games are open to all skill levels and gave 7v7 as an example format.
 Neither comes from the data. Rule 4 of the system prompt now forbids both, and the eval would fail such an answer.
+
+### Free tier and request limits
+
+The agent runs on a free AI Studio key, so it can be tried without billing. The free tier limits it in three ways, and each has its own handling in `agent/src/agent.ts`.
+
+- **Requests per day: 500 on Flash Lite, 20 on Flash.**
+  - The quota belongs to the key's Google Cloud project, so everyone using the key shares it.
+  - A question usually costs two requests: one to choose the tool call and one to write the answer from its result. A turn is capped at 7 requests (6 tool rounds), so a runaway loop can't drain the day.
+  - This is why Flash Lite is the default: 500 requests a day is about 250 questions, while Flash's 20 is about 10.
+  - Once the daily quota is spent, the agent stops at once. The chat says the quota is used up and resets at midnight Pacific time, since retrying before then only wastes time.
+- **Requests per minute: 15 on Flash Lite, 5 on Flash.**
+  - A per-minute 429 tells the caller how long to wait (`retryDelay`). The agent waits that long and retries, up to 3 attempts, so a burst makes an answer slower instead of failing it.
+  - The eval pauses 5 seconds between cases (`EVAL_PAUSE_MS`) to stay under the limit.
+- **"High demand" errors.** Gemini sometimes answers 503 for a few seconds when it's busy. The SDK retries 408 and 5xx errors with backoff (2s, 4s, 8s, 16s). If they keep failing, the chat says Gemini is overloaded.
+
+Two rules keep a failure contained:
+
+- **A failed turn is rolled back.** Otherwise a 429 on a turn's second request would leave a question without an answer, or a tool call without its result, in the history sent with the next message.
+- **Only the user's question and public game data go to Gemini.** On the free tier Google may use prompts and responses to improve its products, so real user data should only go through a paid key.
+
+Still missing: there is no per-user limit, so one busy user can spend everyone's daily quota. Each request also resends the whole conversation, so long chats use more of the tokens-per-minute limit. [Stretching the free Gemini quota](#stretching-the-free-gemini-quota) covers both.
 
 ### Test conversations and the responses we got
 
@@ -313,14 +350,15 @@ Recorded on 2026-09-13 with `gemini-flash-lite-latest`, answered by `gemini-3.5-
 
 | Check | Result |
 |---|---|
-| API unit tests (`api`, `npm test`) | 8 passing |
-| Agent tests: date resolution, tool loop with a scripted model, grounding check (`agent`, `npm test`) | 12 passing |
+| API tests: filtering, validation, GraphiQL examples, PostgreSQL parity (`api`, `npm test`) | 12 passing. The 2 PostgreSQL tests skip when `DATABASE_URL` is unset |
+| Agent tests: date resolution, tool loop with a scripted model, quota handling, grounding check (`agent`, `npm test`) | 15 passing |
 | Flutter analyzer and tests (`app`, `flutter analyze`, `flutter test`) | 0 issues, 10 passing |
 | App on the iOS simulator against the live API | Both screens, "1+ spots", date jump, row detail and tab bar all work |
 | App as a web build in headless Chrome against the live API | Both screens render with live data, and "See all" opens the list |
+| Android release build (`flutter build apk`) on a Pixel 5 emulator, API 36 | Explore home loads live data through `10.0.2.2`, and the installed app holds only the INTERNET permission |
 | Agent tools called directly against the live API | Morning window, empty day, bad date and unknown id all return the expected structured data |
-| Supabase migrations on a throwaway Postgres 17 | Schema and seed apply, the seed re-runs safely, counts match the JSON |
-| Supabase read path in the API | Not run, because it needs a Supabase project |
+| PostgreSQL 17 in Docker (`docker compose up -d --wait`) | Schema, `unaccent` and seed apply on first start. The seed re-runs safely, the counts match the JSON (5 venues, 6 organizers, 19 games), and date filters use `games_local_date_idx` |
+| API against PostgreSQL | 16 filters, all 19 games, the venues and the calendar match the JSON source exactly, and API sessions can't write. The app, GraphiQL and the agent also ran against it |
 | Agent against Gemini (`npm run eval`) | All 6 conversations pass on Gemini 3.5 Flash Lite, with every time, format, price, spot count and venue checked against the tool results. The transcript is in Part 2b |
 
 ---
@@ -335,7 +373,7 @@ Recorded on 2026-09-13 with `gemini-flash-lite-latest`, answered by `gemini-3.5-
   - turn the eval's grounding check into a runtime guard that regenerates or blocks a reply that fails it,
   - add a golden-set eval in CI with a pinned model,
   - consider exposing the schema to other agents through MCP.
-- **Deployment** is deliberately left out until the hosting target is decided. The Supabase schema is ready, and the Flutter web build is a static site that any static host can serve. A serverless entry point for the API is a small addition once the platform is chosen.
+- **Deployment** is deliberately left out until the hosting target is decided. The PostgreSQL schema and its compose file are ready, and the Flutter web build is a static site that any static host can serve. A serverless entry point for the API is a small addition once the platform is chosen.
 
 The five areas below each start with what already exists, checked against the code, and then list what I'd add.
 
@@ -345,7 +383,7 @@ The five areas below each start with what already exists, checked against the co
 
 **Next:**
 - **Stream the agent's reply** over server-sent events, so text and tool calls appear as they happen.
-- **Queue booking writes** once bookings exist, for example with Supabase Queues. Idempotency keys make retries safe, so a retry never books twice.
+- **Queue booking writes** once bookings exist, for example with a jobs table read with `FOR UPDATE SKIP LOCKED`, or the pgmq extension. Idempotency keys make retries safe, so a retry never books twice.
 - **Scheduled jobs with pg_cron** to close games at kick-off, send reminders two hours before, and clear expired chat sessions.
 - **An outbox table**: a trigger records each change as an event in the same transaction, and a worker turns events into notifications and cache invalidations. Nothing is lost while a worker is down.
 - **Run the Gemini eval on a schedule** in CI, so a model update that breaks grounding is caught early.
@@ -358,28 +396,34 @@ The five areas below each start with what already exists, checked against the co
 - **Push through Firebase Cloud Messaging**, which reaches iOS through APNs. A `device_tokens` table holds one row per user and device.
 - **Events worth a notification**: a spot opens in a full game you're waitlisted for, a game you joined starts in two hours, a saved game drops to its last two spots, or an organizer changes or cancels a game.
 - **Deep links** from each notification to the game's detail screen.
-- **Live availability** through GraphQL subscriptions, which graphql-yoga serves over server-sent events, or Supabase Realtime on the games table. The availability chip would update without a refresh.
+- **Live availability** through GraphQL subscriptions, which graphql-yoga serves over server-sent events. A trigger on the games table would feed them through Postgres `LISTEN/NOTIFY`. The availability chip would update without a refresh.
 - **Pull-to-refresh** on both screens as a simple fallback.
 - **User control**: opt-outs per notification type, quiet hours, and a daily cap per user.
 
 ### Database: triggers, functions, procedures and views
 
-**In place:** three tables with foreign keys and check constraints. The checks cover spot ranges, non-negative prices, the local time format, and agreement between the UTC and local kick-off times. Kick-off time and venue are indexed, every table has row-level security, and the seed can be re-run safely. There are no triggers, functions, procedures or views yet. The Supabase path also loads every row and filters in Node, which is fine for 19 games but not for thousands.
+**In place:**
+- Three tables with foreign keys and check constraints. The checks cover spot ranges, non-negative prices, the local time format, and agreement between the UTC and local kick-off times.
+- Two generated columns, `local_date` and `local_start_time`, carry the local date and kick-off time. They are indexed, along with the venue and organizer keys.
+- The `unaccent` extension handles the accent-insensitive venue search.
+- Filtering runs in SQL, API sessions are read-only, and the seed can be re-run safely.
+
+There are no triggers, functions, procedures or views yet.
 
 **Next:**
 - **A `games_with_availability` view** that joins venue and organizer and computes the urgent, available or full state in SQL, so the thresholds live in one place.
-- **A `search_games` function** called through Supabase RPC, so filtering runs in Postgres. It would use `unaccent` for accent-insensitive venue names and a trigram index for fuzzy matches.
-- **A bookings table and a `join_game` function** that locks the game row, checks spots and inserts the booking in one transaction, so two players can never take the last spot at once. Supabase's API calls functions rather than `CALL` procedures, so this is where the stored-procedure logic would live.
+- **A trigram index** (`pg_trgm`) on venue names, so fuzzy matches such as typos work beyond today's substring match.
+- **A bookings table and a `join_game` function** that locks the game row, checks spots and inserts the booking in one transaction, so two players can never take the last spot at once. It is a function rather than a procedure because it returns the booking.
 - **An `archive_past_games` procedure** that pg_cron runs nightly. It moves finished games to an archive table in batches and commits between batches.
 - **Triggers** that keep `spots_available` in step with bookings, maintain `updated_at`, reject bookings for full or started games, and write the outbox events.
 - **A materialized view of games per day**, refreshed by pg_cron, to put cheap counts on the date selector.
-- **Database tests with pgTAP**, so constraints, policies and functions are checked in CI.
+- **Database tests with pgTAP**, so constraints and functions are checked in CI.
 
 ### Caching
 
 **In place:**
 - The JSON source loads once at startup.
-- The Supabase source keeps the whole dataset in memory for 15 seconds, separately in each API instance.
+- The PostgreSQL source queries on every request, with no cache. The indexes keep that cheap.
 - The app has an in-memory GraphQL cache but reads network-only, so spot counts are always fresh. That is deliberate, since stale availability is worse than a slower screen.
 - The agent fetches the reference date on every turn.
 
@@ -387,7 +431,7 @@ The five areas below each start with what already exists, checked against the co
 - **Response caching in the API** with graphql-yoga's response-cache plugin, keyed by query and variables and invalidated by game id when spots change.
 - **A shared cache such as Redis** once there is more than one API instance, because per-instance caches drift apart.
 - **CDN caching for list queries** by sending persisted queries as GET with a short `s-maxage` and `stale-while-revalidate`.
-- **Event-driven invalidation** from the outbox or Supabase Realtime instead of a fixed 15-second window.
+- **Event-driven invalidation** from the outbox or `LISTEN/NOTIFY` once a cache exists, instead of a fixed expiry.
 - **Cache-and-network in the app** with a persistent store, so screens open instantly from the last result, refresh in the background, and work offline.
 - **Never trust a cached spot count for a booking.** The `join_game` function re-checks inside its transaction.
 - **Agent**: cache the reference date for the day and reuse identical tool results within a conversation.
@@ -396,18 +440,74 @@ The five areas below each start with what already exists, checked against the co
 
 **In place:**
 - The API is read-only. It validates every input with clear errors and caps `first` at 500.
-- Every table has row-level security with no public policies, so the public Supabase key reads nothing. The service-role key only comes from the API's environment.
-- `.env` files are gitignored, and only empty templates are committed.
+- PostgreSQL listens on 127.0.0.1 only, and the API is its only client.
+- Every API session is read-only (`default_transaction_read_only=on`, checked by a test).
+- Filter values are always bound parameters, never concatenated into SQL.
+- `.env` files are gitignored. The committed templates contain only local development values.
 - The agent can only call three read-only tools. Messages are capped at 2,000 characters and request bodies at 64 KB. The server issues session IDs as random UUIDs.
-- Android allows plain HTTP only in debug builds.
+- The Android release manifest declares only the INTERNET permission.
 
 **Next:**
-- **Authentication** with Supabase Auth, plus per-user row-level security policies once bookings exist.
-- **Least privilege**: the service-role key bypasses row-level security. A read-only role or a select-only policy for public game data should replace it.
+- **Authentication** through an identity provider that issues JWTs, plus per-user row-level security policies in Postgres once bookings exist.
+- **Least privilege**: the API connects as the database owner and relies on read-only sessions. A dedicated `games_api` role with only SELECT grants should replace it, and the password should come from a secret store, not the compose file.
 - **Rate limits** per IP and per session on `/graphql` and `/api/chat`. The chat comes first, because every message spends Gemini quota.
 - **GraphQL hardening**: depth and cost limits, a persisted-query allowlist, and masked errors in production. Today raw error messages go back to the caller, and GraphiQL and introspection are always on. Yoga's masking still lets the intentional validation messages through.
 - **Tighter CORS**: any origin can call the API today. Only the app's own origins should.
-- **Agent sessions**: expire idle sessions and cap history length, since the in-memory map grows without limit. Error replies should stop echoing raw exception text.
+- **Agent sessions**: expire idle sessions and cap history length, since the in-memory map grows without limit. Quota and overload errors already get a clear message, but other error replies still echo raw exception text and should stop.
 - **Prompt-injection defense** if venue or organizer names ever become user-generated. Tool output stays data, and the reply guard from the agent section applies.
 - **Transport and headers**: HTTPS only, the iOS local-network exception limited to debug builds, and a Content-Security-Policy and HSTS on the chat page.
 - **Supply chain**: Dependabot, `npm audit` and GitHub secret scanning.
+
+### Stretching the free Gemini quota
+
+**In place:**
+- Flash Lite as the default model.
+- Two requests per question.
+- Per-minute 429s are waited out.
+- The daily limit fails fast.
+- Failed turns are rolled back.
+
+[Free tier and request limits](#free-tier-and-request-limits) has the details.
+
+**Next:** most questions are the same few searches, such as "tomorrow morning", "this weekend" or "spots at La Catalana", and they don't need a model to answer. The plan is to put cheaper layers in front of Gemini, so the quota goes to the questions that need it.
+
+```mermaid
+flowchart LR
+  Q[Question] --> C{Answer cache}
+  C -- hit --> A[Answer]
+  C -- miss --> R{Intent router}
+  R -- parsed --> T[search_games + template] --> A
+  R -- open-ended --> G[LLM gateway]
+  G -- within budget --> M1[Flash Lite] --> A
+  G -- Flash Lite spent --> M2[Second free model] --> A
+  G -- every quota spent --> J[Queued job] -. after the reset .-> P[Push or inbox]
+  O[Outbox: a game changed] -. invalidates .-> C
+```
+
+- **An answer cache shared by all users.**
+  - The key is the normalized question plus a data version, the newest `updated_at` among the games. Normalizing means lowercasing and replacing relative dates with the dates they resolve to.
+  - The first "games tomorrow morning" of the day costs two requests, and every repeat costs none.
+  - The outbox from the async section bumps the data version whenever spots change, so a cached answer never shows stale availability.
+- **An intent router in front of the model.**
+  - A small deterministic parser recognizes the common shapes: a day word, a time of day, or a venue name from `list_venues`. It calls `search_games` directly and formats the reply from a template.
+  - Only questions it can't parse reach Gemini.
+  - `calendar.ts` already does the hardest part, resolving the dates.
+- **One request instead of two for plain searches.** The model chooses the tool call, and the server formats the list instead of sending the results back for a second call. That alone doubles the daily capacity, from about 250 questions to about 500.
+- **An LLM gateway that owns the quota.**
+  - It tracks the project's budget of 15 requests a minute and 500 a day before calling Gemini, instead of learning about it from 429s.
+  - It gives each session a fair share, so one user can't spend the whole day.
+  - It puts live questions ahead of background work.
+  - The per-IP and per-session limits under Security are the first step toward it.
+- **A model cascade.**
+  - Each free model has its own quota. When Flash Lite's daily limit runs out, the gateway falls back to another free model that supports function calling.
+  - A model has to pass the eval before it joins the cascade.
+  - When every quota is spent, the cache and the router keep answering the common questions.
+- **Automatic retries after a reset, with answers delivered later.**
+  - *Per-minute limits:* done. The wait is a few seconds, so the answer still comes back in the same request.
+  - *Daily limit:* the question becomes a job in the queue from the async section, storing the dates it resolved to when it was asked.
+    - After midnight Pacific a worker runs it again against fresh data, since spot counts will have changed. If the game day has already passed, the job is dropped.
+    - The answer arrives as a push notification or in an in-app inbox.
+    - The replay is throttled behind live traffic, so the backlog doesn't spend the new day's quota in its first minute.
+    - This needs user accounts and a delivery channel, which the demo doesn't have yet.
+- **The eval on its own budget.** It should run in CI on a separate paid key, so testing never uses up the users' daily quota.
+- **Not an option: multiple free keys or projects.** Spreading traffic across them gets around the limits instead of working within them, and Google's API terms forbid circumventing usage limits. Once there is real traffic, the answer is a paid key, whose limits rise with each usage tier.

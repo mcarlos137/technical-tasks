@@ -1,7 +1,7 @@
 /**
- * Domain model + pure filtering logic shared by every data source.
- * Keeping the filter logic in one place guarantees the JSON file and the
- * Supabase table answer every query identically.
+ * Domain model and the reference filter logic. The JSON source filters with these functions;
+ * the PostgreSQL source runs the same filter in SQL, and postgres.test.ts checks that the two
+ * answer every query identically.
  */
 
 export type Availability = 'URGENT' | 'AVAILABLE' | 'FULL';
@@ -58,6 +58,9 @@ export interface GamesFilter {
 
 export const URGENT_THRESHOLD = 2;
 
+/** Bad input from the caller. The API reports it as BAD_USER_INPUT; any other error is a server error. */
+export class ValidationError extends Error {}
+
 export function availabilityOf(spotsAvailable: number): Availability {
   if (spotsAvailable <= 0) return 'FULL';
   if (spotsAvailable <= URGENT_THRESHOLD) return 'URGENT';
@@ -69,14 +72,14 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export function assertTime(value: string, field: string): string {
   if (!TIME_RE.test(value)) {
-    throw new Error(`Invalid ${field}: "${value}". Expected a 24h local time formatted HH:mm, e.g. "12:00".`);
+    throw new ValidationError(`Invalid ${field}: "${value}". Expected a 24h local time formatted HH:mm, e.g. "12:00".`);
   }
   return value;
 }
 
 export function assertIsoDate(value: string, field: string): string {
   if (!DATE_RE.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
-    throw new Error(`Invalid ${field}: "${value}". Expected an ISO calendar date formatted YYYY-MM-DD.`);
+    throw new ValidationError(`Invalid ${field}: "${value}". Expected an ISO calendar date formatted YYYY-MM-DD.`);
   }
   return value;
 }
@@ -96,16 +99,13 @@ function localParts(startsAt: string, durationMinutes: number) {
   };
 }
 
-export function resolveGame(record: GameRecord, dataset: Dataset): Game {
-  const venue = dataset.venues.find((v) => v.id === record.venueId);
-  const organizer = dataset.organizers.find((o) => o.id === record.organizerId);
-  if (!venue) throw new Error(`Game ${record.id} references unknown venue ${record.venueId}`);
-  if (!organizer) throw new Error(`Game ${record.id} references unknown organizer ${record.organizerId}`);
+/** Builds the API shape from a stored game and its venue and organizer. */
+export function toGame(record: GameRecord, venue: Venue, organizer: Organizer, timezone: string): Game {
   const { venueId: _v, organizerId: _o, ...rest } = record;
   return {
     ...rest,
     ...localParts(record.startsAt, record.durationMinutes),
-    timezone: dataset.timezone,
+    timezone,
     venue,
     organizer,
     availability: availabilityOf(record.spotsAvailable),
@@ -113,24 +113,32 @@ export function resolveGame(record: GameRecord, dataset: Dataset): Game {
   };
 }
 
+export function resolveGame(record: GameRecord, dataset: Dataset): Game {
+  const venue = dataset.venues.find((v) => v.id === record.venueId);
+  const organizer = dataset.organizers.find((o) => o.id === record.organizerId);
+  if (!venue) throw new Error(`Game ${record.id} references unknown venue ${record.venueId}`);
+  if (!organizer) throw new Error(`Game ${record.id} references unknown organizer ${record.organizerId}`);
+  return toGame(record, venue, organizer, dataset.timezone);
+}
+
 export function normalizeFilter(filter: GamesFilter | null | undefined): Required<GamesFilter> {
   const f = filter ?? {};
   if (f.date && (f.dateFrom || f.dateTo)) {
-    throw new Error('Use either "date" or a "dateFrom"/"dateTo" range, not both.');
+    throw new ValidationError('Use either "date" or a "dateFrom"/"dateTo" range, not both.');
   }
   const date = f.date ? assertIsoDate(f.date, 'date') : null;
   const dateFrom = f.dateFrom ? assertIsoDate(f.dateFrom, 'dateFrom') : null;
   const dateTo = f.dateTo ? assertIsoDate(f.dateTo, 'dateTo') : null;
   if (dateFrom && dateTo && dateFrom > dateTo) {
-    throw new Error(`dateFrom (${dateFrom}) must not be after dateTo (${dateTo}).`);
+    throw new ValidationError(`dateFrom (${dateFrom}) must not be after dateTo (${dateTo}).`);
   }
   const startTimeFrom = f.startTimeFrom ? assertTime(f.startTimeFrom, 'startTimeFrom') : null;
   const startTimeTo = f.startTimeTo ? assertTime(f.startTimeTo, 'startTimeTo') : null;
   if (startTimeFrom && startTimeTo && startTimeFrom >= startTimeTo) {
-    throw new Error(`startTimeFrom (${startTimeFrom}) must be earlier than startTimeTo (${startTimeTo}).`);
+    throw new ValidationError(`startTimeFrom (${startTimeFrom}) must be earlier than startTimeTo (${startTimeTo}).`);
   }
   if (f.minSpotsAvailable != null && (f.minSpotsAvailable < 0 || !Number.isInteger(f.minSpotsAvailable))) {
-    throw new Error('minSpotsAvailable must be a non-negative integer.');
+    throw new ValidationError('minSpotsAvailable must be a non-negative integer.');
   }
   return {
     date,

@@ -1,4 +1,4 @@
-import { GoogleGenAI, type Content } from '@google/genai';
+import { ApiError, GoogleGenAI, type Content } from '@google/genai';
 import { toolDeclarations, runTool } from './tools.js';
 import { buildDateContext } from './calendar.js';
 import { fetchReferenceDate } from './gamesApi.js';
@@ -10,19 +10,64 @@ export const MODEL = process.env.GEMINI_MODEL ?? 'gemini-flash-lite-latest';
 const MAX_TOOL_ROUNDS = 6;
 
 /**
- * Gemini client with retries. The free tier often answers 429 (rate limit) or 503
- * ("high demand") for a few seconds, so the SDK retries 408/429/5xx with
- * exponential backoff (about 2s, 4s, 8s, 16s) before giving up.
+ * Gemini client with retries. The free tier often answers 503 ("high demand") for a few seconds,
+ * so the SDK retries 408 and 5xx with exponential backoff (about 2s, 4s, 8s, 16s). 429 is left
+ * out on purpose: withQuotaRetry handles it, because only Gemini's reply says how long to wait.
  */
 export function createModelClient(apiKey: string): GoogleGenAI {
   return new GoogleGenAI({
     apiKey,
-    httpOptions: { retryOptions: { attempts: 5, initialDelay: 2, maxDelay: 16 } },
+    httpOptions: {
+      retryOptions: { attempts: 5, initialDelay: 2, maxDelay: 16, httpStatusCodes: [408, 500, 502, 503, 504] },
+    },
   });
+}
+
+const QUOTA_ATTEMPTS = 3;
+const MAX_QUOTA_WAIT_MS = 60_000;
+
+/**
+ * How long a per-minute 429 asks us to wait, read from its RetryInfo. Null for the daily limit
+ * (the quota only refills at midnight Pacific time) and for any other error.
+ */
+export function quotaRetryDelayMs(e: unknown): number | null {
+  if (!(e instanceof ApiError) || e.status !== 429 || /PerDay/.test(e.message)) return null;
+  const m = /"retryDelay":\s*"(\d+(?:\.\d+)?)s"/.exec(e.message);
+  return m ? Math.ceil(Number(m[1]) * 1000) : 10_000;
+}
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Waits out per-minute 429s, which clear within a minute. The daily limit fails at once. */
+async function withQuotaRetry<T>(call: () => Promise<T>, sleep: (ms: number) => Promise<void>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await call();
+    } catch (e) {
+      const delay = quotaRetryDelayMs(e);
+      if (delay === null || delay > MAX_QUOTA_WAIT_MS || attempt >= QUOTA_ATTEMPTS) throw e;
+      await sleep(delay);
+    }
+  }
 }
 
 export interface ToolTrace { name: string; args: Record<string, unknown>; result: Record<string, unknown> }
 export interface AgentTurn { reply: string; toolCalls: ToolTrace[]; modelVersion?: string }
+
+/**
+ * Turns the free tier's quota and overload errors into a status and message the chat can show,
+ * instead of a 500 carrying Gemini's raw JSON. Returns null for anything else.
+ */
+export function describeModelError(e: unknown): { status: number; error: string } | null {
+  if (!(e instanceof ApiError)) return null;
+  if (e.status === 429) {
+    return /PerDay/.test(e.message)
+      ? { status: 429, error: `The free Gemini quota for ${MODEL} is used up for today. It resets at midnight Pacific time; until then, set GEMINI_MODEL to another model or use a paid key.` }
+      : { status: 429, error: 'The free Gemini quota allows only a few requests per minute. Wait a minute and ask again.' };
+  }
+  if (e.status === 503) return { status: 503, error: 'Gemini is overloaded right now. Try again in a moment.' };
+  return null;
+}
 
 export async function systemPrompt(): Promise<string> {
   const ref = await fetchReferenceDate();
@@ -47,6 +92,8 @@ export type ModelClient = Pick<GoogleGenAI, 'models'>;
 export interface AgentDeps {
   systemInstruction?: string;
   runTool?: typeof runTool;
+  /** Used while waiting out a per-minute 429; tests pass a fake. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /** One agent turn: sends the user message, executes tool calls until the model produces text. */
@@ -58,32 +105,41 @@ export async function runAgentTurn(
 ): Promise<AgentTurn> {
   const systemInstruction = deps.systemInstruction ?? (await systemPrompt());
   const exec = deps.runTool ?? runTool;
+  const sleep = deps.sleep ?? wait;
+  // A failed turn (usually a 429 after the retries) is rolled back, so the session never keeps
+  // a question without an answer or a tool call without its result.
+  const start = history.length;
   history.push({ role: 'user', parts: [{ text: userMessage }] });
-  const toolCalls: ToolTrace[] = [];
+  try {
+    const toolCalls: ToolTrace[] = [];
 
-  for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      contents: history,
-      config: {
-        systemInstruction,
-        tools: [{ functionDeclarations: toolDeclarations }],
-      },
-    });
-    const content = response.candidates?.[0]?.content;
-    if (content) history.push(content);
-    const calls = response.functionCalls ?? [];
-    if (calls.length === 0) {
-      return { reply: response.text?.trim() || "Sorry, I couldn't produce an answer.", toolCalls, modelVersion: response.modelVersion };
+    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+      const response = await withQuotaRetry(() => ai.models.generateContent({
+        model: MODEL,
+        contents: history,
+        config: {
+          systemInstruction,
+          tools: [{ functionDeclarations: toolDeclarations }],
+        },
+      }), sleep);
+      const content = response.candidates?.[0]?.content;
+      if (content) history.push(content);
+      const calls = response.functionCalls ?? [];
+      if (calls.length === 0) {
+        return { reply: response.text?.trim() || "Sorry, I couldn't produce an answer.", toolCalls, modelVersion: response.modelVersion };
+      }
+      const parts = [];
+      for (const call of calls) {
+        const args = (call.args ?? {}) as Record<string, unknown>;
+        const result = await exec(call.name ?? '', args);
+        toolCalls.push({ name: call.name ?? '', args, result });
+        parts.push({ functionResponse: { id: call.id, name: call.name, response: result } });
+      }
+      history.push({ role: 'user', parts });
     }
-    const parts = [];
-    for (const call of calls) {
-      const args = (call.args ?? {}) as Record<string, unknown>;
-      const result = await exec(call.name ?? '', args);
-      toolCalls.push({ name: call.name ?? '', args, result });
-      parts.push({ functionResponse: { id: call.id, name: call.name, response: result } });
-    }
-    history.push({ role: 'user', parts });
+    return { reply: 'Sorry, I could not complete that request (too many tool calls).', toolCalls };
+  } catch (e) {
+    history.length = start;
+    throw e;
   }
-  return { reply: 'Sorry, I could not complete that request (too many tool calls).', toolCalls };
 }

@@ -1,0 +1,37 @@
+# technical-tasks
+
+My workspace for take-home tasks. The deliverable is `barcelona/`, and its [README](barcelona/README.md) is the document the evaluator reads. This file is just my notes.
+
+| Path | What it is |
+|---|---|
+| `barcelona/` | The Explore screens + games QA agent task: Flutter app, GraphQL API, Gemini agent |
+| `docs/` | The task brief (PDF) |
+
+## Sharing `barcelona/` with the evaluator
+
+Don't zip the folder straight from disk. `barcelona/agent/.env` holds my Gemini API key, and the `node_modules` and Flutter build folders add hundreds of MB. Export only the committed files instead. Commit first, because this exports `HEAD`, not the working copy:
+
+```bash
+git archive --format=zip --prefix=barcelona/ -o ~/Desktop/barcelona.zip HEAD:barcelona
+```
+
+Then confirm that no secrets or dependencies slipped in. This should print nothing:
+
+```bash
+unzip -Z1 ~/Desktop/barcelona.zip | grep -E '(^|/)\.env$|node_modules|/build/'
+```
+
+The evaluator runs `npm install` and `flutter pub get` themselves, as described in `barcelona/README.md`.
+
+## Local notes
+
+- **Gemini key**: this lives in `barcelona/agent/.env`, which is gitignored. The default model is `gemini-flash-lite-latest`, whose free tier allows 15 requests a minute and 500 a day. `gemini-flash-latest` allows only 20 a day.
+- **Ports**:
+  - API: `:4000`, with GraphiQL at `/graphql`.
+  - PostgreSQL: `:5433`, database `games`, user `games`.
+  - Agent chat: `:3001`.
+  - Web build: `:8080`, served with `python3 -m http.server` from `barcelona/app/build/web`.
+- **Eval**: `cd barcelona/agent && npm run eval -- --report eval.md` needs the API running. It uses about 15 Gemini requests.
+- **Database**: local PostgreSQL 17 in Docker, started with `cd barcelona/api && docker compose up -d`, on port 5433. No Supabase.
+- **Deployment** is not decided yet. Use personal accounts only.
+- **Access**: the repo stays private. The evaluator gets the zip, not repo access.

@@ -1,0 +1,23 @@
+# Local PostgreSQL for the games API. Run `docker compose up -d` from this folder.
+# On the first start (empty volume) Postgres runs db/migrations in order: schema, then seed.
+# `docker compose down -v` deletes the data, so the next start runs them again.
+name: barcelona-games
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: games
+      POSTGRES_USER: games
+      POSTGRES_PASSWORD: games # local development only; the port is bound to 127.0.0.1
+    ports:
+      - "127.0.0.1:5433:5432" # 5433 so it doesn't clash with a Postgres already on 5432
+    volumes:
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+      - games-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U games -d games"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  games-db:

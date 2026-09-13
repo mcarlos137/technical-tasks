@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import type { Content } from '@google/genai';
-import { runAgentTurn, createModelClient, MODEL } from './agent.js';
+import { runAgentTurn, createModelClient, describeModelError, MODEL } from './agent.js';
 import { GAMES_API_URL } from './gamesApi.js';
 
 const apiKey = process.env.GEMINI_API_KEY;
@@ -58,6 +58,8 @@ createServer(async (req, res) => {
     send(404, { error: 'Not found' });
   } catch (e) {
     console.error(e);
+    const known = describeModelError(e);
+    if (known) return send(known.status, { error: known.error });
     send(500, { error: e instanceof Error ? e.message : String(e) });
   }
 }).listen(port, () => {

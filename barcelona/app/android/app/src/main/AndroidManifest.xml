@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Release builds need this to reach the games API (debug and profile get it from their own manifests). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="barcelona_explore"
         android:name="${applicationName}"

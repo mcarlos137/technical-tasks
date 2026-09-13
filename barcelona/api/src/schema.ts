@@ -1,7 +1,7 @@
 import { createSchema } from 'graphql-yoga';
 import { GraphQLError } from 'graphql';
 import type { GamesRepository } from './repository.js';
-import type { GamesFilter } from './domain.js';
+import { ValidationError, type GamesFilter } from './domain.js';
 
 export interface Context { repo: GamesRepository }
 
@@ -148,23 +148,24 @@ export const resolvers = {
       const first = args.first ?? 100;
       if (first < 1 || first > 500) userError(new Error('first must be between 1 and 500.'));
       let result;
-      try { result = await ctx.repo.listGames(args.filter); } catch (e) { userError(e); }
+      try { result = await ctx.repo.listGames(args.filter); } catch (e) {
+        if (e instanceof ValidationError) userError(e);
+        throw e;
+      }
       const { date: _d, ...appliedFilter } = result.filter;
       return { totalCount: result.games.length, games: result.games.slice(0, first), appliedFilter };
     },
     game: (_: unknown, args: { id: string }, ctx: Context) => ctx.repo.getGame(args.id),
     venues: (_: unknown, __: unknown, ctx: Context) => ctx.repo.listVenues(),
     referenceDate: async (_: unknown, __: unknown, ctx: Context) => {
-      const data = await ctx.repo.dataset();
-      const dates = data.games.map((g) => g.startsAt.slice(0, 10)).sort();
-      const weekday = WEEKDAYS[new Date(`${data.referenceDate}T12:00:00Z`).getUTCDay()];
+      const c = await ctx.repo.calendar();
       return {
-        today: data.referenceDate,
-        weekday,
-        timezone: data.timezone,
-        city: data.city,
-        firstGameDate: dates[0] ?? null,
-        lastGameDate: dates[dates.length - 1] ?? null,
+        today: c.referenceDate,
+        weekday: WEEKDAYS[new Date(`${c.referenceDate}T12:00:00Z`).getUTCDay()],
+        timezone: c.timezone,
+        city: c.city,
+        firstGameDate: c.firstGameDate,
+        lastGameDate: c.lastGameDate,
       };
     },
   },
