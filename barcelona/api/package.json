@@ -1,0 +1,25 @@
+{
+  "name": "celebreak-games-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GraphQL API for pick-up games (Explore screens + Games Q&A agent)",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/*.test.ts",
+    "seed:sql": "tsx src/seed-sql.ts > supabase/migrations/0002_seed_games.sql"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "graphql": "^16.11.0",
+    "graphql-yoga": "^5.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.0"
+  },
+  "engines": { "node": ">=20" }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "celebreak-games-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal Gemini chat agent that answers questions about pick-up games via the Games GraphQL API",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "eval": "tsx scripts/eval.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^2.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.0"
+  },
+  "engines": { "node": ">=20" }
+}

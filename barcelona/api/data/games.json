@@ -1,0 +1,47 @@
+{
+  "referenceDate": "2026-08-25",
+  "timezone": "Europe/Madrid",
+  "city": "Barcelona",
+  "venues": [
+    { "id": "aliga", "name": "L'Àliga", "address": "Carrer de l'Àliga, Barcelona" },
+    { "id": "agapito-fernandez", "name": "Agapito Fernández", "address": "Camp Municipal Agapito Fernández, Barcelona" },
+    { "id": "la-catalana", "name": "La Catalana", "address": "Camp de Futbol La Catalana, Sant Adrià de Besòs" },
+    { "id": "el-carmel", "name": "El Carmel", "address": "Camp Municipal El Carmel, Barcelona" },
+    { "id": "can-drago", "name": "Camp Municipal de Futbol Can Dragó", "address": "Passeig d'Andreu Nin, Barcelona" }
+  ],
+  "organizers": [
+    { "id": "diego-p", "displayName": "Diego P", "avatarUrl": null },
+    { "id": "simon-r", "displayName": "Simón R", "avatarUrl": null },
+    { "id": "roberto-t", "displayName": "Roberto T", "avatarUrl": null },
+    { "id": "johnny-c", "displayName": "Johnny C", "avatarUrl": null },
+    { "id": "eugenio-r", "displayName": "Eugenio R", "avatarUrl": null },
+    { "id": "marc-v", "displayName": "Marc V", "avatarUrl": null }
+  ],
+  "games": [
+    { "id": "g-0825-2115-aliga-a",   "startsAt": "2026-08-25T21:15:00+02:00", "durationMinutes": 60, "venueId": "aliga",             "format": "9v9",   "organizerId": "diego-p",   "spotsTotal": 18, "spotsAvailable": 0,  "isRecorded": false, "priceEur": 9.9 },
+    { "id": "g-0825-2115-aliga-b",   "startsAt": "2026-08-25T21:15:00+02:00", "durationMinutes": 60, "venueId": "aliga",             "format": "9v9",   "organizerId": "diego-p",   "spotsTotal": 18, "spotsAvailable": 0,  "isRecorded": false, "priceEur": 9.9 },
+    { "id": "g-0825-2155-agapito",   "startsAt": "2026-08-25T21:55:00+02:00", "durationMinutes": 60, "venueId": "agapito-fernandez", "format": "8v8",   "organizerId": "simon-r",   "spotsTotal": 16, "spotsAvailable": 0,  "isRecorded": false, "priceEur": 9.9 },
+
+    { "id": "g-0826-0715-catalana",  "startsAt": "2026-08-26T07:15:00+02:00", "durationMinutes": 60, "venueId": "la-catalana",       "format": "8v8",   "organizerId": "roberto-t", "spotsTotal": 16, "spotsAvailable": 0,  "isRecorded": true,  "priceEur": 7.5 },
+    { "id": "g-0826-0815-catalana",  "startsAt": "2026-08-26T08:15:00+02:00", "durationMinutes": 60, "venueId": "la-catalana",       "format": "8v8",   "organizerId": "roberto-t", "spotsTotal": 16, "spotsAvailable": 0,  "isRecorded": true,  "priceEur": 7.5 },
+    { "id": "g-0826-0915-catalana",  "startsAt": "2026-08-26T09:15:00+02:00", "durationMinutes": 60, "venueId": "la-catalana",       "format": "8v8",   "organizerId": "roberto-t", "spotsTotal": 16, "spotsAvailable": 0,  "isRecorded": true,  "priceEur": 7.5 },
+    { "id": "g-0826-0915-agapito",   "startsAt": "2026-08-26T09:15:00+02:00", "durationMinutes": 60, "venueId": "agapito-fernandez", "format": "8v8",   "organizerId": "johnny-c",  "spotsTotal": 16, "spotsAvailable": 2,  "isRecorded": false, "priceEur": 9.9 },
+    { "id": "g-0826-1015-agapito",   "startsAt": "2026-08-26T10:15:00+02:00", "durationMinutes": 60, "venueId": "agapito-fernandez", "format": "8v8",   "organizerId": "johnny-c",  "spotsTotal": 16, "spotsAvailable": 4,  "isRecorded": false, "priceEur": 9.9 },
+    { "id": "g-0826-1845-carmel-a",  "startsAt": "2026-08-26T18:45:00+02:00", "durationMinutes": 60, "venueId": "el-carmel",         "format": "8v8",   "organizerId": "eugenio-r", "spotsTotal": 16, "spotsAvailable": 3,  "isRecorded": false, "priceEur": 9.9 },
+    { "id": "g-0826-1845-carmel-b",  "startsAt": "2026-08-26T18:45:00+02:00", "durationMinutes": 60, "venueId": "el-carmel",         "format": "8v8",   "organizerId": "eugenio-r", "spotsTotal": 16, "spotsAvailable": 5,  "isRecorded": false, "priceEur": 9.9 },
+
+    { "id": "g-0827-1930-catalana",  "startsAt": "2026-08-27T19:30:00+02:00", "durationMinutes": 60, "venueId": "la-catalana",       "format": "8v8",   "organizerId": "roberto-t", "spotsTotal": 16, "spotsAvailable": 6,  "isRecorded": true,  "priceEur": 9.9 },
+    { "id": "g-0827-2100-aliga",     "startsAt": "2026-08-27T21:00:00+02:00", "durationMinutes": 60, "venueId": "aliga",             "format": "9v9",   "organizerId": "diego-p",   "spotsTotal": 18, "spotsAvailable": 1,  "isRecorded": false, "priceEur": 9.9 },
+
+    { "id": "g-0828-2000-carmel",    "startsAt": "2026-08-28T20:00:00+02:00", "durationMinutes": 60, "venueId": "el-carmel",         "format": "8v8",   "organizerId": "eugenio-r", "spotsTotal": 16, "spotsAvailable": 0,  "isRecorded": false, "priceEur": 9.9 },
+    { "id": "g-0828-2130-agapito",   "startsAt": "2026-08-28T21:30:00+02:00", "durationMinutes": 60, "venueId": "agapito-fernandez", "format": "8v8",   "organizerId": "simon-r",   "spotsTotal": 16, "spotsAvailable": 3,  "isRecorded": false, "priceEur": 9.9 },
+
+    { "id": "g-0829-1000-catalana",  "startsAt": "2026-08-29T10:00:00+02:00", "durationMinutes": 60, "venueId": "la-catalana",       "format": "8v8",   "organizerId": "roberto-t", "spotsTotal": 16, "spotsAvailable": 7,  "isRecorded": true,  "priceEur": 7.5 },
+    { "id": "g-0829-1800-candrago",  "startsAt": "2026-08-29T18:00:00+02:00", "durationMinutes": 90, "venueId": "can-drago",         "format": "11v11", "organizerId": "marc-v",    "spotsTotal": 22, "spotsAvailable": 8,  "isRecorded": false, "priceEur": 12.0 },
+
+    { "id": "g-0830-1100-carmel",    "startsAt": "2026-08-30T11:00:00+02:00", "durationMinutes": 60, "venueId": "el-carmel",         "format": "8v8",   "organizerId": "eugenio-r", "spotsTotal": 16, "spotsAvailable": 2,  "isRecorded": false, "priceEur": 9.9 },
+    { "id": "g-0830-1900-aliga",     "startsAt": "2026-08-30T19:00:00+02:00", "durationMinutes": 60, "venueId": "aliga",             "format": "9v9",   "organizerId": "diego-p",   "spotsTotal": 18, "spotsAvailable": 5,  "isRecorded": false, "priceEur": 9.9 },
+
+    { "id": "g-0831-2030-catalana",  "startsAt": "2026-08-31T20:30:00+02:00", "durationMinutes": 60, "venueId": "la-catalana",       "format": "8v8",   "organizerId": "roberto-t", "spotsTotal": 16, "spotsAvailable": 10, "isRecorded": true,  "priceEur": 9.9 }
+  ]
+}
