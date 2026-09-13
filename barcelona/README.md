@@ -79,12 +79,22 @@ cp .env.example .env # then paste a free key from https://aistudio.google.com/ap
 npm start            # chat UI at http://localhost:3001
 npm test             # date-resolution + agent-loop tests (no key needed)
 npm run eval         # runs the 5 required conversations against Gemini and checks them
+npm run eval -- --report eval.md   # same, and writes the transcript as Markdown
 ```
 
 The server starts without a key too. The chat then replies with setup instructions instead of calling the model.
 
-`GEMINI_MODEL` defaults to `gemini-flash-latest`, the alias Google keeps pointed at the current free Flash model.
-On 13 Sep 2026 it served Gemini 3.8 Flash, and the 2.5 models were already closed to new keys. Set it to pin a specific version.
+`GEMINI_MODEL` defaults to `gemini-flash-lite-latest`, the alias Google keeps pointed at its current Flash Lite model.
+On 13 Sep 2026 it served Gemini 3.5 Flash Lite. Flash Lite is the default because the free tier gives it far more room:
+
+| Free-tier model | Requests per minute | Requests per day |
+|---|---|---|
+| Gemini 3.5 Flash Lite, the default | 15 | 500 |
+| Gemini 3.8 Flash | 5 | 20 |
+
+These limits come from AI Studio's rate-limit page for this project on 13 Sep 2026, and they can differ per account.
+Each question costs about two requests, and one eval run about 12, so Flash's daily limit is used up after one or two runs.
+Set `GEMINI_MODEL=gemini-flash-latest` for the stronger model. The Gemini 2.5 models are already closed to new keys.
 
 ---
 
@@ -175,6 +185,127 @@ The required conversations and what the data makes them test:
 | 5 | "Which game has the best players?" | States that the data has no player or skill information. |
 
 `npm run eval` runs these conversations against the real model and asserts on both the tool arguments and the reply.
+It also checks every reply against the tool results of its conversation:
+
+- Every time, match format, price and spot count in the reply must appear in a tool result.
+- A real venue can only be named after a tool returned it.
+- General claims the data can't support fail the case, such as "games are open to all levels".
+
+The check lives in `agent/src/grounding.ts` and has its own unit tests.
+It was added after a run on Gemini 3.8 Flash answered the "best players" question correctly, then claimed that games are open to all skill levels and gave 7v7 as an example format.
+Neither comes from the data. Rule 4 of the system prompt now forbids both, and the eval would fail such an answer.
+
+### Test conversations and the responses we got
+
+The transcript below is the latest run, word for word. Expand a conversation to see the tool call and the answer.
+
+Recorded on 2026-09-13 with `gemini-flash-lite-latest`, answered by `gemini-3.5-flash-lite`. 6/6 cases passed.
+
+<details>
+<summary><b>1. Simple question (tomorrow morning)</b>: passed</summary>
+
+**User:** What games are there tomorrow morning?
+
+**Tool call:** `search_games({"date":"2026-08-26","start_time_to":"12:00","start_time_from":"06:00"})`, 5 games returned
+
+**Agent:**
+
+> Here are the games for tomorrow morning (Wednesday, 26 August 2026):
+>
+> * 07:15 — La Catalana (8v8) — Full
+> * 08:15 — La Catalana (8v8) — Full
+> * 09:15 — Agapito Fernández (8v8) — 2 spots left
+> * 09:15 — La Catalana (8v8) — Full
+> * 10:15 — Agapito Fernández (8v8) — 4 spots left
+
+</details>
+
+<details>
+<summary><b>2a. Relative date: this weekend</b>: passed</summary>
+
+**User:** Anything this weekend?
+
+**Tool call:** `search_games({"date_from":"2026-08-29","date_to":"2026-08-30"})`, 4 games returned
+
+**Agent:**
+
+> Here are the games available this weekend:
+>
+> **Saturday 29 August 2026**
+> - 10:00 — La Catalana (8v8) — 7 spots left
+> - 18:00 — Camp Municipal de Futbol Can Dragó (11v11) — 8 spots left
+>
+> **Sunday 30 August 2026**
+> - 11:00 — El Carmel (8v8) — 2 spots left
+> - 19:00 — L'Àliga (9v9) — 5 spots left
+
+</details>
+
+<details>
+<summary><b>2b. Relative date: on Thursday</b>: passed</summary>
+
+**User:** What about on Thursday?
+
+**Tool call:** `search_games({"date":"2026-08-27"})`, 2 games returned
+
+**Agent:**
+
+> Here are the games for Thursday, 27 August 2026:
+>
+> * 19:30 — La Catalana (8v8) — 6 spots left
+> * 21:00 — L'Àliga (9v9) — 1 spot left
+
+</details>
+
+<details>
+<summary><b>3. Grounded: empty result</b>: passed</summary>
+
+**User:** Are there any games on 5 September?
+
+**Tool call:** `search_games({"date":"2026-09-05"})`, 0 games returned
+
+**Agent:**
+
+> There are no games scheduled for Saturday 5 September 2026. Games are currently scheduled through Monday 31 August 2026.
+
+</details>
+
+<details>
+<summary><b>4. Ambiguity: La Catalana across several days</b>: passed</summary>
+
+**User:** Any spots at La Catalana?
+
+**Tool call:** `search_games({"min_spots_available":1,"venue_name":"La Catalana"})`, 3 games returned
+
+**Agent:**
+
+> Yes, there are available spots at La Catalana across several days:
+>
+> **Thursday, 2026-08-27**
+> * 19:30 — La Catalana (8v8) — 6 spots left
+>
+> **Saturday, 2026-08-29**
+> * 10:00 — La Catalana (8v8) — 7 spots left
+>
+> **Monday, 2026-08-31**
+> * 20:30 — La Catalana (8v8) — 10 spots left
+
+</details>
+
+<details>
+<summary><b>5. Honest about limits</b>: passed</summary>
+
+**User:** Which game has the best players?
+
+**Tool calls:** none
+
+**Agent:**
+
+> I don't have information about player skill levels, ratings, or player quality. I can only provide details on game dates, kick-off times, venues, formats, spots available, prices, and organizers. 
+>
+> If you'd like to check available games for a specific day, time, or venue, let me know!
+
+</details>
 
 ---
 
@@ -183,14 +314,14 @@ The required conversations and what the data makes them test:
 | Check | Result |
 |---|---|
 | API unit tests (`api`, `npm test`) | 8 passing |
-| Agent tests: date resolution and tool loop with a scripted model (`agent`, `npm test`) | 8 passing |
+| Agent tests: date resolution, tool loop with a scripted model, grounding check (`agent`, `npm test`) | 12 passing |
 | Flutter analyzer and tests (`app`, `flutter analyze`, `flutter test`) | 0 issues, 10 passing |
 | App on the iOS simulator against the live API | Both screens, "1+ spots", date jump, row detail and tab bar all work |
 | App as a web build in headless Chrome against the live API | Both screens render with live data, and "See all" opens the list |
 | Agent tools called directly against the live API | Morning window, empty day, bad date and unknown id all return the expected structured data |
 | Supabase migrations on a throwaway Postgres 17 | Schema and seed apply, the seed re-runs safely, counts match the JSON |
 | Supabase read path in the API | Not run, because it needs a Supabase project |
-| Agent against Gemini (`npm run eval`) | All 6 conversations pass. `gemini-flash-latest` served Gemini 3.8 Flash on 13 Sep 2026. Every game, time and spot count matched the API. The "best players" answer also added an unsupported general claim, noted under agent quality below |
+| Agent against Gemini (`npm run eval`) | All 6 conversations pass on Gemini 3.5 Flash Lite, with every time, format, price, spot count and venue checked against the tool results. The transcript is in Part 2b |
 
 ---
 
@@ -201,8 +332,7 @@ The required conversations and what the data makes them test:
 - **Only "1+ spots" works.** Filters, Lowest price and YEGO are visual only. The API already supports price data and more filters, so wiring them is mostly UI work.
 - **No pagination.** `first` bounds the result size. A real API would use cursor pagination.
 - **Agent quality.** With more time I'd:
-  - add a server-side guard that checks every time and venue in the reply against the tool results,
-  - tighten the prompt against general claims, because in the eval the "best players" answer said games are open to all skill levels and gave 7v7 as an example format, and neither comes from the data,
+  - turn the eval's grounding check into a runtime guard that regenerates or blocks a reply that fails it,
   - add a golden-set eval in CI with a pinned model,
   - consider exposing the schema to other agents through MCP.
 - **Deployment** is deliberately left out until the hosting target is decided. The Supabase schema is ready, and the Flutter web build is a static site that any static host can serve. A serverless entry point for the API is a small addition once the platform is chosen.

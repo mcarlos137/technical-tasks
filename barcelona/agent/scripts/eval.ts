@@ -1,11 +1,17 @@
 /**
  * Runs the five required conversations against the live agent loop and checks
- * the tool calls + answers. Requires GEMINI_API_KEY and a running Games API.
+ * the tool calls + answers. Every reply is also checked against the tool results:
+ * times, formats, prices, spot counts and venues must come from a tool, and general
+ * claims the data can't support fail the case. Requires GEMINI_API_KEY and a running Games API.
  *   npm run eval
+ *   npm run eval -- --report eval.md    # also writes the transcript as Markdown
  */
 import '../src/env.js';
+import { writeFileSync } from 'node:fs';
 import type { Content } from '@google/genai';
-import { runAgentTurn, createModelClient, type AgentTurn } from '../src/agent.js';
+import { runAgentTurn, createModelClient, MODEL, type AgentTurn } from '../src/agent.js';
+import { gql } from '../src/gamesApi.js';
+import { collectFacts, ungroundedMentions, unsupportedClaims } from '../src/grounding.js';
 
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) { console.error('GEMINI_API_KEY is required'); process.exit(1); }
@@ -74,12 +80,51 @@ const cases: Case[] = [
   },
 ];
 
+const { venues } = await gql<{ venues: { name: string }[] }>('{ venues { name } }');
+const venueNames = venues.map((v) => v.name);
+
+/** Grounding problems for every turn, checked against the tool results seen so far in the conversation. */
+function groundingProblems(turns: AgentTurn[]): string[] {
+  const seen: unknown[] = [];
+  return turns.flatMap((t, i) => {
+    seen.push(...t.toolCalls.map((c) => c.result));
+    const label = turns.length > 1 ? `turn ${i + 1}: ` : '';
+    return [...ungroundedMentions(t.reply, collectFacts(seen), venueNames), ...unsupportedClaims(t.reply)].map((p) => label + p);
+  });
+}
+
+const quote = (text: string) => text.split('\n').map((l) => (l.trim() ? `> ${l}` : '>')).join('\n');
+
+function markdownCase(c: Case, turns: AgentTurn[], problems: string[]): string {
+  const lines = ['<details>', `<summary><b>${c.name}</b>: ${problems.length ? 'failed' : 'passed'}</summary>`, ''];
+  turns.forEach((t, i) => {
+    lines.push(`**User:** ${c.turns[i]}`, '');
+    if (t.toolCalls.length === 0) lines.push('**Tool calls:** none', '');
+    for (const tc of t.toolCalls) {
+      const count = (tc.result as { total_count?: number }).total_count;
+      const found = count === undefined ? '' : `, ${count} game${count === 1 ? '' : 's'} returned`;
+      lines.push(`**Tool call:** \`${tc.name}(${JSON.stringify(tc.args)})\`${found}`, '');
+    }
+    lines.push('**Agent:**', '', quote(t.reply), '');
+  });
+  for (const p of problems) lines.push(`- Problem: ${p}`);
+  lines.push('</details>', '');
+  return lines.join('\n');
+}
+
+const reportArg = process.argv.indexOf('--report');
+const reportPath = reportArg > -1 ? process.argv[reportArg + 1] : undefined;
+const report: string[] = [];
+const versions = new Set<string>();
 let failures = 0;
-for (const c of cases) {
+const PAUSE_MS = Number(process.env.EVAL_PAUSE_MS ?? 5000); // stay under the free tier's requests-per-minute limit
+for (const [n, c] of cases.entries()) {
+  if (n > 0) await new Promise((r) => setTimeout(r, PAUSE_MS));
   const history: Content[] = [];
   const turns: AgentTurn[] = [];
   for (const msg of c.turns) turns.push(await runAgentTurn(ai, history, msg));
-  const problems = c.check(turns);
+  for (const t of turns) if (t.modelVersion) versions.add(t.modelVersion);
+  const problems = [...c.check(turns), ...groundingProblems(turns)];
   failures += problems.length ? 1 : 0;
   console.log(`\n${problems.length ? '✗' : '✓'} ${c.name}`);
   for (const [i, t] of turns.entries()) {
@@ -88,6 +133,14 @@ for (const c of cases) {
     console.log(`  agent: ${t.reply.replace(/\n/g, '\n         ')}`);
   }
   for (const p of problems) console.log(`  ! ${p}`);
+  report.push(markdownCase(c, turns, problems));
 }
-console.log(`\n${cases.length - failures}/${cases.length} cases passed`);
+const summary = `${cases.length - failures}/${cases.length} cases passed`;
+console.log(`\n${summary}`);
+if (reportPath) {
+  const served = versions.size ? `, answered by \`${[...versions].join('`, `')}\`` : '';
+  const header = `Recorded on ${new Date().toISOString().slice(0, 10)} with \`${MODEL}\`${served}. ${summary}.\n\n`;
+  writeFileSync(reportPath, header + report.join('\n'));
+  console.log(`Transcript written to ${reportPath}`);
+}
 process.exit(failures ? 1 : 0);
