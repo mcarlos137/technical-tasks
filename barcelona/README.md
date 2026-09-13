@@ -8,7 +8,8 @@ Two parts built on **one** small GraphQL API:
 | [`app/`](app) | Explore home + Pick-up games list | Flutter 3.44.8, `graphql` client |
 | [`agent/`](agent) | Minimal chat agent with the API exposed as tools | Node 20+, Google Gemini (`@google/genai`) |
 
-The Flutter screens and the agent both read from the same API, which serves `api/data/games.json`.
+The Flutter screens and the agent both read from the same API. The API reads the games from a local PostgreSQL database seeded from
+`api/data/games.json`, or from that JSON file directly when no database is configured.
 
 > **Reference "today" in the mock data: Tuesday 25 August 2026, Europe/Madrid.**
 > The API exposes it as `referenceDate { today }`. The app labels "Today"/"Tomorrow" from it,
@@ -37,23 +38,42 @@ The API explorer is running the same "tomorrow morning" query the agent sends.
 
 ## How to run
 
-### 1. API (start this first)
+Run the parts in order: create the database, start the API, then run the app and the agent, which both call the API.
+Each block starts from this folder (`barcelona/`). The API and the agent are servers, so give each its own terminal.
+
+### 1. Database (create it first)
+
+This step needs Docker:
+
+```bash
+cd api
+docker compose up -d --wait   # creates PostgreSQL 17 on 127.0.0.1:5433; database, user and password are all "games"
+docker compose exec db psql -U games -d games -c 'select count(*) from games'   # prints 19
+```
+
+On the first start, Postgres runs the two files in `api/db/migrations` in order:
+
+- `0001_games_schema.sql` creates the `venues`, `organizers` and `games` tables and enables the `unaccent` extension.
+- `0002_seed_games.sql` loads 5 venues, 6 organizers and 19 games.
+
+`docker compose down -v` deletes the database, so the next `up` creates it again.
+Any other PostgreSQL 14 or newer also works. Create an empty database, then run
+`psql "$DATABASE_URL" -f db/migrations/0001_games_schema.sql -f db/migrations/0002_seed_games.sql`.
+If you don't have Docker, skip this step and the `cp` line in step 2. With no `DATABASE_URL`, the API serves `data/games.json`, which holds the same data.
+
+### 2. API
 
 ```bash
 cd api
 npm install
-docker compose up -d --wait   # local PostgreSQL 17 on port 5433, schema and seed applied on first start
-cp .env.example .env          # DATABASE_URL points at that database
+cp .env.example .env          # DATABASE_URL points at the database from step 1
 npm start                     # http://localhost:4000/graphql  (GraphiQL opens with example queries)
 npm test                      # filtering, validation and GraphiQL examples, plus PostgreSQL parity when DATABASE_URL is set
 ```
 
 The startup log names the source: `PostgreSQL at localhost:5433/games` followed by `PostgreSQL connected: 19 games`.
-Without Docker, skip the first two steps: with no `DATABASE_URL` the API serves `data/games.json`, which holds the same data.
-Any other PostgreSQL 14 or newer also works: `psql "$DATABASE_URL" -f db/migrations/0001_games_schema.sql -f db/migrations/0002_seed_games.sql`.
-`docker compose down -v` deletes the database, so the next `up` applies the migrations again.
 
-### 2. Flutter app
+### 3. Flutter app
 
 Install Flutter 3.44.8 first if you don't have it. A shallow clone of the release tag is the fastest route:
 
@@ -78,7 +98,7 @@ flutter test         # widget + unit tests (no API needed, uses an in-memory fak
 The app calls `http://localhost:4000/graphql`, or `http://10.0.2.2:4000/graphql` on the Android emulator.
 Override it with `--dart-define=GAMES_API_URL=http://<host>:4000/graphql`, for example on a physical device.
 
-### 3. Agent
+### 4. Agent
 
 ```bash
 cd agent
