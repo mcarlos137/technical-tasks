@@ -84,7 +84,7 @@ npm run eval         # runs the 5 required conversations against Gemini and chec
 The server starts without a key too. The chat then replies with setup instructions instead of calling the model.
 
 `GEMINI_MODEL` defaults to `gemini-flash-latest`, the alias Google keeps pointed at the current free Flash model.
-Set it to pin a specific version.
+On 13 Sep 2026 it served Gemini 3.8 Flash, and the 2.5 models were already closed to new keys. Set it to pin a specific version.
 
 ---
 
@@ -161,6 +161,7 @@ The agent lives in `agent/src`: `agent.ts` runs the loop, `tools.ts` holds the t
   - Tool results come back grouped by date, and each carries a `note`. An empty result says "NO games match… say so plainly". A multi-day result says "Results span N dates… break down per day or ask".
   - API errors return to the model as structured data with a hint to fix the arguments. They never crash the loop, so the model never has to fall back to memory.
 - **Honest limits.** The prompt lists exactly which fields exist, which also tells the model what is missing: player skill, ratings, weather, facilities, booking. Questions about those get "that isn't available" instead of a guess.
+- **Retries.** The free tier often answers "rate limited" or "high demand" for a few seconds, so the Gemini client retries those errors with backoff before giving up.
 - **Bounded loop.** A turn allows at most 6 tool rounds. Chat sessions are kept in memory, and the UI shows each tool call and its raw result under the answer, so grounding can be audited.
 
 The required conversations and what the data makes them test:
@@ -189,7 +190,7 @@ The required conversations and what the data makes them test:
 | Agent tools called directly against the live API | Morning window, empty day, bad date and unknown id all return the expected structured data |
 | Supabase migrations on a throwaway Postgres 17 | Schema and seed apply, the seed re-runs safely, counts match the JSON |
 | Supabase read path in the API | Not run, because it needs a Supabase project |
-| Agent against Gemini (`npm run eval`) | Not run yet, because it needs a `GEMINI_API_KEY` |
+| Agent against Gemini (`npm run eval`) | All 6 conversations pass. `gemini-flash-latest` served Gemini 3.8 Flash on 13 Sep 2026. Every game, time and spot count matched the API. The "best players" answer also added an unsupported general claim, noted under agent quality below |
 
 ---
 
@@ -201,6 +202,7 @@ The required conversations and what the data makes them test:
 - **No pagination.** `first` bounds the result size. A real API would use cursor pagination.
 - **Agent quality.** With more time I'd:
   - add a server-side guard that checks every time and venue in the reply against the tool results,
+  - tighten the prompt against general claims, because in the eval the "best players" answer said games are open to all skill levels and gave 7v7 as an example format, and neither comes from the data,
   - add a golden-set eval in CI with a pinned model,
   - consider exposing the schema to other agents through MCP.
 - **Deployment** is deliberately left out until the hosting target is decided. The Supabase schema is ready, and the Flutter web build is a static site that any static host can serve. A serverless entry point for the API is a small addition once the platform is chosen.

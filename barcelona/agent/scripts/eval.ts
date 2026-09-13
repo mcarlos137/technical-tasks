@@ -4,12 +4,12 @@
  *   npm run eval
  */
 import '../src/env.js';
-import { GoogleGenAI, type Content } from '@google/genai';
-import { runAgentTurn, type AgentTurn } from '../src/agent.js';
+import type { Content } from '@google/genai';
+import { runAgentTurn, createModelClient, type AgentTurn } from '../src/agent.js';
 
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) { console.error('GEMINI_API_KEY is required'); process.exit(1); }
-const ai = new GoogleGenAI({ apiKey });
+const ai = createModelClient(apiKey);
 
 interface Case { name: string; turns: string[]; check: (t: AgentTurn[]) => string[] }
 

@@ -7,6 +7,18 @@ import { fetchReferenceDate } from './gamesApi.js';
 export const MODEL = process.env.GEMINI_MODEL ?? 'gemini-flash-latest';
 const MAX_TOOL_ROUNDS = 6;
 
+/**
+ * Gemini client with retries. The free tier often answers 429 (rate limit) or 503
+ * ("high demand") for a few seconds, so the SDK retries 408/429/5xx with
+ * exponential backoff (about 2s, 4s, 8s, 16s) before giving up.
+ */
+export function createModelClient(apiKey: string): GoogleGenAI {
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: { retryOptions: { attempts: 5, initialDelay: 2, maxDelay: 16 } },
+  });
+}
+
 export interface ToolTrace { name: string; args: Record<string, unknown>; result: Record<string, unknown> }
 export interface AgentTurn { reply: string; toolCalls: ToolTrace[] }
 

@@ -4,14 +4,14 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { GoogleGenAI, type Content } from '@google/genai';
-import { runAgentTurn, MODEL } from './agent.js';
+import type { Content } from '@google/genai';
+import { runAgentTurn, createModelClient, MODEL } from './agent.js';
 import { GAMES_API_URL } from './gamesApi.js';
 
 const apiKey = process.env.GEMINI_API_KEY;
 const MISSING_KEY = 'GEMINI_API_KEY is not set. Get a free key at https://aistudio.google.com/apikey, put it in agent/.env and restart.';
 if (!apiKey) console.warn(`⚠️  ${MISSING_KEY}`);
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const ai = apiKey ? createModelClient(apiKey) : null;
 const port = Number(process.env.PORT ?? 3001);
 const here = dirname(fileURLToPath(import.meta.url));
 const indexHtml = readFileSync(join(here, '..', 'public', 'index.html'), 'utf8');
