@@ -9,10 +9,10 @@ out.push('insert into public.venues (id, name, address) values');
 out.push(d.venues.map((v) => `  (${q(v.id)}, ${q(v.name)}, ${q(v.address)})`).join(',\n') + '\non conflict (id) do update set name = excluded.name, address = excluded.address;');
 out.push('insert into public.organizers (id, display_name, avatar_url) values');
 out.push(d.organizers.map((o) => `  (${q(o.id)}, ${q(o.displayName)}, ${q(o.avatarUrl)})`).join(',\n') + '\non conflict (id) do update set display_name = excluded.display_name, avatar_url = excluded.avatar_url;');
-out.push('insert into public.games (id, starts_at, starts_at_local, duration_minutes, venue_id, format, organizer_id, spots_total, spots_available, is_recorded, price_eur) values');
-out.push(d.games.map((g) => `  (${q(g.id)}, ${q(g.startsAt)}, ${q(g.startsAt)}, ${g.durationMinutes}, ${q(g.venueId)}, ${q(g.format)}, ${q(g.organizerId)}, ${g.spotsTotal}, ${g.spotsAvailable}, ${g.isRecorded}, ${g.priceEur})`).join(',\n') + `
+out.push('insert into public.games (id, starts_at, starts_at_local, duration_minutes, venue_id, format, organizer_id, spots_total, spots_available, is_recorded, price_eur, list_position) values');
+out.push(d.games.map((g, i) => `  (${q(g.id)}, ${q(g.startsAt)}, ${q(g.startsAt)}, ${g.durationMinutes}, ${q(g.venueId)}, ${q(g.format)}, ${q(g.organizerId)}, ${g.spotsTotal}, ${g.spotsAvailable}, ${g.isRecorded}, ${g.priceEur}, ${i})`).join(',\n') + `
 on conflict (id) do update set starts_at = excluded.starts_at, starts_at_local = excluded.starts_at_local, duration_minutes = excluded.duration_minutes,
   venue_id = excluded.venue_id, format = excluded.format, organizer_id = excluded.organizer_id,
   spots_total = excluded.spots_total, spots_available = excluded.spots_available,
-  is_recorded = excluded.is_recorded, price_eur = excluded.price_eur;`);
+  is_recorded = excluded.is_recorded, price_eur = excluded.price_eur, list_position = excluded.list_position;`);
 console.log(out.join('\n'));

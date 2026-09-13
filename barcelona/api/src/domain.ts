@@ -168,5 +168,7 @@ export function applyFilter(games: Game[], filter: Required<GamesFilter>): Game[
     .filter((g) => !filter.availability || filter.availability.includes(g.availability))
     .filter((g) => !filter.startTimeFrom || g.startTime >= filter.startTimeFrom)
     .filter((g) => !filter.startTimeTo || g.startTime < filter.startTimeTo)
-    .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id));
+    // Stable sort: games that kick off together keep their listing order (data/games.json),
+    // which is the order the design screenshots show.
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 }

@@ -105,7 +105,7 @@ export const typeDefs = /* GraphQL */ `
   type GamesResult {
     "Number of games matching the filter (before \\"first\\" is applied)."
     totalCount: Int!
-    "Matching games ordered by kick-off time ascending. Empty list when nothing matches."
+    "Matching games ordered by kick-off time ascending; games that kick off together keep their listing order. Empty list when nothing matches."
     games: [Game!]!
     appliedFilter: AppliedFilter!
   }

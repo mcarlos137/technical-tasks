@@ -14,27 +14,27 @@ insert into public.organizers (id, display_name, avatar_url) values
   ('eugenio-r', 'Eugenio R', null),
   ('marc-v', 'Marc V', null)
 on conflict (id) do update set display_name = excluded.display_name, avatar_url = excluded.avatar_url;
-insert into public.games (id, starts_at, starts_at_local, duration_minutes, venue_id, format, organizer_id, spots_total, spots_available, is_recorded, price_eur) values
-  ('g-0825-2115-aliga-a', '2026-08-25T21:15:00+02:00', '2026-08-25T21:15:00+02:00', 60, 'aliga', '9v9', 'diego-p', 18, 0, false, 9.9),
-  ('g-0825-2115-aliga-b', '2026-08-25T21:15:00+02:00', '2026-08-25T21:15:00+02:00', 60, 'aliga', '9v9', 'diego-p', 18, 0, false, 9.9),
-  ('g-0825-2155-agapito', '2026-08-25T21:55:00+02:00', '2026-08-25T21:55:00+02:00', 60, 'agapito-fernandez', '8v8', 'simon-r', 16, 0, false, 9.9),
-  ('g-0826-0715-catalana', '2026-08-26T07:15:00+02:00', '2026-08-26T07:15:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 0, true, 7.5),
-  ('g-0826-0815-catalana', '2026-08-26T08:15:00+02:00', '2026-08-26T08:15:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 0, true, 7.5),
-  ('g-0826-0915-catalana', '2026-08-26T09:15:00+02:00', '2026-08-26T09:15:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 0, true, 7.5),
-  ('g-0826-0915-agapito', '2026-08-26T09:15:00+02:00', '2026-08-26T09:15:00+02:00', 60, 'agapito-fernandez', '8v8', 'johnny-c', 16, 2, false, 9.9),
-  ('g-0826-1015-agapito', '2026-08-26T10:15:00+02:00', '2026-08-26T10:15:00+02:00', 60, 'agapito-fernandez', '8v8', 'johnny-c', 16, 4, false, 9.9),
-  ('g-0826-1845-carmel-a', '2026-08-26T18:45:00+02:00', '2026-08-26T18:45:00+02:00', 60, 'el-carmel', '8v8', 'eugenio-r', 16, 3, false, 9.9),
-  ('g-0826-1845-carmel-b', '2026-08-26T18:45:00+02:00', '2026-08-26T18:45:00+02:00', 60, 'el-carmel', '8v8', 'eugenio-r', 16, 5, false, 9.9),
-  ('g-0827-1930-catalana', '2026-08-27T19:30:00+02:00', '2026-08-27T19:30:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 6, true, 9.9),
-  ('g-0827-2100-aliga', '2026-08-27T21:00:00+02:00', '2026-08-27T21:00:00+02:00', 60, 'aliga', '9v9', 'diego-p', 18, 1, false, 9.9),
-  ('g-0828-2000-carmel', '2026-08-28T20:00:00+02:00', '2026-08-28T20:00:00+02:00', 60, 'el-carmel', '8v8', 'eugenio-r', 16, 0, false, 9.9),
-  ('g-0828-2130-agapito', '2026-08-28T21:30:00+02:00', '2026-08-28T21:30:00+02:00', 60, 'agapito-fernandez', '8v8', 'simon-r', 16, 3, false, 9.9),
-  ('g-0829-1000-catalana', '2026-08-29T10:00:00+02:00', '2026-08-29T10:00:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 7, true, 7.5),
-  ('g-0829-1800-candrago', '2026-08-29T18:00:00+02:00', '2026-08-29T18:00:00+02:00', 90, 'can-drago', '11v11', 'marc-v', 22, 8, false, 12),
-  ('g-0830-1100-carmel', '2026-08-30T11:00:00+02:00', '2026-08-30T11:00:00+02:00', 60, 'el-carmel', '8v8', 'eugenio-r', 16, 2, false, 9.9),
-  ('g-0830-1900-aliga', '2026-08-30T19:00:00+02:00', '2026-08-30T19:00:00+02:00', 60, 'aliga', '9v9', 'diego-p', 18, 5, false, 9.9),
-  ('g-0831-2030-catalana', '2026-08-31T20:30:00+02:00', '2026-08-31T20:30:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 10, true, 9.9)
+insert into public.games (id, starts_at, starts_at_local, duration_minutes, venue_id, format, organizer_id, spots_total, spots_available, is_recorded, price_eur, list_position) values
+  ('g-0825-2115-aliga-a', '2026-08-25T21:15:00+02:00', '2026-08-25T21:15:00+02:00', 60, 'aliga', '9v9', 'diego-p', 18, 0, false, 9.9, 0),
+  ('g-0825-2115-aliga-b', '2026-08-25T21:15:00+02:00', '2026-08-25T21:15:00+02:00', 60, 'aliga', '9v9', 'diego-p', 18, 0, false, 9.9, 1),
+  ('g-0825-2155-agapito', '2026-08-25T21:55:00+02:00', '2026-08-25T21:55:00+02:00', 60, 'agapito-fernandez', '8v8', 'simon-r', 16, 0, false, 9.9, 2),
+  ('g-0826-0715-catalana', '2026-08-26T07:15:00+02:00', '2026-08-26T07:15:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 0, true, 7.5, 3),
+  ('g-0826-0815-catalana', '2026-08-26T08:15:00+02:00', '2026-08-26T08:15:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 0, true, 7.5, 4),
+  ('g-0826-0915-catalana', '2026-08-26T09:15:00+02:00', '2026-08-26T09:15:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 0, true, 7.5, 5),
+  ('g-0826-0915-agapito', '2026-08-26T09:15:00+02:00', '2026-08-26T09:15:00+02:00', 60, 'agapito-fernandez', '8v8', 'johnny-c', 16, 2, false, 9.9, 6),
+  ('g-0826-1015-agapito', '2026-08-26T10:15:00+02:00', '2026-08-26T10:15:00+02:00', 60, 'agapito-fernandez', '8v8', 'johnny-c', 16, 4, false, 9.9, 7),
+  ('g-0826-1845-carmel-a', '2026-08-26T18:45:00+02:00', '2026-08-26T18:45:00+02:00', 60, 'el-carmel', '8v8', 'eugenio-r', 16, 3, false, 9.9, 8),
+  ('g-0826-1845-carmel-b', '2026-08-26T18:45:00+02:00', '2026-08-26T18:45:00+02:00', 60, 'el-carmel', '8v8', 'eugenio-r', 16, 5, false, 9.9, 9),
+  ('g-0827-1930-catalana', '2026-08-27T19:30:00+02:00', '2026-08-27T19:30:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 6, true, 9.9, 10),
+  ('g-0827-2100-aliga', '2026-08-27T21:00:00+02:00', '2026-08-27T21:00:00+02:00', 60, 'aliga', '9v9', 'diego-p', 18, 1, false, 9.9, 11),
+  ('g-0828-2000-carmel', '2026-08-28T20:00:00+02:00', '2026-08-28T20:00:00+02:00', 60, 'el-carmel', '8v8', 'eugenio-r', 16, 0, false, 9.9, 12),
+  ('g-0828-2130-agapito', '2026-08-28T21:30:00+02:00', '2026-08-28T21:30:00+02:00', 60, 'agapito-fernandez', '8v8', 'simon-r', 16, 3, false, 9.9, 13),
+  ('g-0829-1000-catalana', '2026-08-29T10:00:00+02:00', '2026-08-29T10:00:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 7, true, 7.5, 14),
+  ('g-0829-1800-candrago', '2026-08-29T18:00:00+02:00', '2026-08-29T18:00:00+02:00', 90, 'can-drago', '11v11', 'marc-v', 22, 8, false, 12, 15),
+  ('g-0830-1100-carmel', '2026-08-30T11:00:00+02:00', '2026-08-30T11:00:00+02:00', 60, 'el-carmel', '8v8', 'eugenio-r', 16, 2, false, 9.9, 16),
+  ('g-0830-1900-aliga', '2026-08-30T19:00:00+02:00', '2026-08-30T19:00:00+02:00', 60, 'aliga', '9v9', 'diego-p', 18, 5, false, 9.9, 17),
+  ('g-0831-2030-catalana', '2026-08-31T20:30:00+02:00', '2026-08-31T20:30:00+02:00', 60, 'la-catalana', '8v8', 'roberto-t', 16, 10, true, 9.9, 18)
 on conflict (id) do update set starts_at = excluded.starts_at, starts_at_local = excluded.starts_at_local, duration_minutes = excluded.duration_minutes,
   venue_id = excluded.venue_id, format = excluded.format, organizer_id = excluded.organizer_id,
   spots_total = excluded.spots_total, spots_available = excluded.spots_available,
-  is_recorded = excluded.is_recorded, price_eur = excluded.price_eur;
+  is_recorded = excluded.is_recorded, price_eur = excluded.price_eur, list_position = excluded.list_position;

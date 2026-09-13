@@ -163,7 +163,7 @@ The API is meant to be consumed by a language model, so it favors being **unambi
 5. **Empty is a normal answer.** Unknown venues or empty days return `totalCount: 0` and `games: []`, never null and never an error. `game(id)` returns null for a missing id.
 6. **Derived state lives on the server.** `availability` is a closed enum of `URGENT`, `AVAILABLE` and `FULL`, computed from `spotsAvailable`, so the app and the agent can't disagree on the thresholds.
 7. **Forgiving where it is safe.** `venueName` matching ignores case and accents, so "aliga" finds "L'Àliga". `venueId` gives an exact match. Filters combine with AND.
-8. **Bounded and ordered.** Results are sorted by kick-off. The `first` argument defaults to 100, capped at 500.
+8. **Bounded and ordered.** Results are sorted by kick-off, and games that kick off together keep their listing order, as in the design screenshots. The `first` argument defaults to 100, capped at 500.
 9. **Read-only.** There are no mutations, and the database sessions are read-only, so a model driving the API cannot change anything.
 
 ```graphql
@@ -375,7 +375,7 @@ Recorded on 2026-09-13 with `gemini-flash-lite-latest`, answered by `gemini-3.5-
 
 | Check | Result |
 |---|---|
-| API tests: filtering, validation, GraphiQL examples, PostgreSQL parity (`api`, `npm test`) | 12 passing. The 2 PostgreSQL tests skip when `DATABASE_URL` is unset |
+| API tests: filtering, validation, GraphiQL examples, PostgreSQL parity (`api`, `npm test`) | 13 passing. The 2 PostgreSQL tests skip when `DATABASE_URL` is unset |
 | Agent tests: date resolution, tool loop with a scripted model, quota handling, grounding check (`agent`, `npm test`) | 15 passing |
 | Flutter analyzer and tests (`app`, `flutter analyze`, `flutter test`) | 0 issues, 10 passing |
 | App on the iOS simulator against the live API | Both screens, "1+ spots", date jump, row detail and tab bar all work |
@@ -430,6 +430,7 @@ The five areas below each start with what already exists, checked against the co
 **In place:**
 - Three tables with foreign keys and check constraints. The checks cover spot ranges, non-negative prices, the local time format, and agreement between the UTC and local kick-off times.
 - Two generated columns, `local_date` and `local_start_time`, carry the local date and kick-off time. They are indexed, along with the venue and organizer keys.
+- A `list_position` column keeps the listing order for games that kick off at the same time.
 - The `unaccent` extension handles the accent-insensitive venue search.
 - Filtering runs in SQL, API sessions are read-only, and the seed can be re-run safely.
 

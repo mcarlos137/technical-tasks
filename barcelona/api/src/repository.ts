@@ -140,7 +140,7 @@ export class PostgresGamesRepository implements GamesRepository {
                                           else 'AVAILABLE' end) = any($6))
          and ($7::text is null or g.local_start_time >= $7)
          and ($8::text is null or g.local_start_time < $8)
-       order by g.starts_at_local collate "C", g.id collate "C"`,
+       order by g.starts_at_local collate "C", g.list_position, g.id collate "C"`,
       [f.dateFrom, f.dateTo, f.venueId, f.venueName, f.minSpotsAvailable, f.availability,
         f.startTimeFrom, f.startTimeTo, URGENT_THRESHOLD],
     );

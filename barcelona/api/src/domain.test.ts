@@ -20,6 +20,11 @@ test('single date filter returns only that day, sorted by time', async () => {
   assert.equal(games.at(-1)!.startTime, '18:45');
 });
 
+test('games that kick off together keep their listing order, as in the design', async () => {
+  const { games } = await repo.listGames({ date: '2026-08-26', startTimeFrom: '09:15', startTimeTo: '09:16' });
+  assert.deepEqual(games.map((g) => g.id), ['g-0826-0915-catalana', 'g-0826-0915-agapito']);
+});
+
 test('date range is inclusive', async () => {
   const { games } = await repo.listGames({ dateFrom: '2026-08-29', dateTo: '2026-08-30' });
   assert.deepEqual([...new Set(games.map((g) => g.date))], ['2026-08-29', '2026-08-30']);

@@ -36,7 +36,10 @@ create table if not exists public.games (
   spots_total int not null check (spots_total > 0),
   spots_available int not null check (spots_available >= 0 and spots_available <= spots_total),
   is_recorded boolean not null default false,
-  price_eur numeric(6,2) not null check (price_eur >= 0)
+  price_eur numeric(6,2) not null check (price_eur >= 0),
+  -- Position in the published listing: the order of data/games.json and of the design
+  -- screenshots. Games that kick off at the same time are listed in this order.
+  list_position int not null check (list_position >= 0)
 );
 
 create index if not exists games_local_date_idx on public.games (local_date, local_start_time);
