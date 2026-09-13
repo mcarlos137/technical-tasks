@@ -93,7 +93,7 @@ flutter pub get
 flutter test         # widget + unit tests (no API needed, uses an in-memory fake)
 flutter build web    # static site in build/web, which any static file server can serve
 flutter devices      # lists the iOS simulators, Android emulators, Chrome and macOS you can run on
-flutter run -d <id>  # keeps running; <id> comes from flutter devices, e.g. chrome
+flutter run -d chrome   # keeps running; swap chrome for any device id from flutter devices
 ```
 
 Pass `-d`: with several devices connected, a bare `flutter run` stops to ask which one to use.
@@ -108,7 +108,7 @@ cd agent
 npm install
 cp .env.example .env # then paste a free key from https://aistudio.google.com/apikey into GEMINI_API_KEY
 npm test             # date-resolution + agent-loop tests (no key needed)
-npm run eval -- --report eval.md   # runs the 5 required conversations against Gemini, checks them and writes eval.md
+npm run eval -- --report eval.md   # runs the 5 required conversations (6 cases) against Gemini, checks them and writes eval.md
 npm start            # keeps running: chat UI at http://localhost:3001
 ```
 
