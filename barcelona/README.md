@@ -198,11 +198,84 @@ The required conversations and what the data makes them test:
 - **Promo images**: the carousel cards use gradients and glyphs instead of photos, to avoid shipping third-party imagery. Swapping in `Image.asset` is a one-line change per card.
 - **Availability colors**: the screenshot shows "5 spots" with a gray outline, but the spec defines only three states, so every available game gets the green outline. With a design answer, a fourth "plenty" state is easy to add as another enum value.
 - **Only "1+ spots" works.** Filters, Lowest price and YEGO are visual only. The API already supports price data and more filters, so wiring them is mostly UI work.
-- **No pagination or subscriptions.** `first` bounds the result size. A real API would use cursor pagination and push spot changes live.
-- **Agent**: sessions live in memory and there is no streaming. With more time I'd:
-  - stream tokens,
+- **No pagination.** `first` bounds the result size. A real API would use cursor pagination.
+- **Agent quality.** With more time I'd:
   - add a server-side guard that checks every time and venue in the reply against the tool results,
   - add a golden-set eval in CI with a pinned model,
   - consider exposing the schema to other agents through MCP.
-- **Auth and rate limiting** are omitted because the API is local and read-only. Before any public deployment it needs rate limits, and it needs auth if write operations ever arrive.
 - **Deployment** is deliberately left out until the hosting target is decided. The Supabase schema is ready, and the Flutter web build is a static site that any static host can serve. A serverless entry point for the API is a small addition once the platform is chosen.
+
+The five areas below each start with what already exists, checked against the code, and then list what I'd add.
+
+### Async processing
+
+**In place:** all I/O is non-blocking. The app loads data with futures and shows loading and error states. Each agent call to the API times out after 10 seconds, and a turn stops after 6 tool rounds. There are no background jobs, queues or scheduled tasks, and the chat request waits for the whole answer.
+
+**Next:**
+- **Stream the agent's reply** over server-sent events, so text and tool calls appear as they happen.
+- **Queue booking writes** once bookings exist, for example with Supabase Queues. Idempotency keys make retries safe, so a retry never books twice.
+- **Scheduled jobs with pg_cron** to close games at kick-off, send reminders two hours before, and clear expired chat sessions.
+- **An outbox table**: a trigger records each change as an event in the same transaction, and a worker turns events into notifications and cache invalidations. Nothing is lost while a worker is down.
+- **Run the Gemini eval on a schedule** in CI, so a model update that breaks grounding is caught early.
+
+### Push notifications and live updates
+
+**In place:** nothing yet. The app fetches when a screen opens or when "1+ spots" is toggled. There is no pull-to-refresh and no live update.
+
+**Next:**
+- **Push through Firebase Cloud Messaging**, which reaches iOS through APNs. A `device_tokens` table holds one row per user and device.
+- **Events worth a notification**: a spot opens in a full game you're waitlisted for, a game you joined starts in two hours, a saved game drops to its last two spots, or an organizer changes or cancels a game.
+- **Deep links** from each notification to the game's detail screen.
+- **Live availability** through GraphQL subscriptions, which graphql-yoga serves over server-sent events, or Supabase Realtime on the games table. The availability chip would update without a refresh.
+- **Pull-to-refresh** on both screens as a simple fallback.
+- **User control**: opt-outs per notification type, quiet hours, and a daily cap per user.
+
+### Database: triggers, functions, procedures and views
+
+**In place:** three tables with foreign keys and check constraints. The checks cover spot ranges, non-negative prices, the local time format, and agreement between the UTC and local kick-off times. Kick-off time and venue are indexed, every table has row-level security, and the seed can be re-run safely. There are no triggers, functions, procedures or views yet. The Supabase path also loads every row and filters in Node, which is fine for 19 games but not for thousands.
+
+**Next:**
+- **A `games_with_availability` view** that joins venue and organizer and computes the urgent, available or full state in SQL, so the thresholds live in one place.
+- **A `search_games` function** called through Supabase RPC, so filtering runs in Postgres. It would use `unaccent` for accent-insensitive venue names and a trigram index for fuzzy matches.
+- **A bookings table and a `join_game` function** that locks the game row, checks spots and inserts the booking in one transaction, so two players can never take the last spot at once. Supabase's API calls functions rather than `CALL` procedures, so this is where the stored-procedure logic would live.
+- **An `archive_past_games` procedure** that pg_cron runs nightly. It moves finished games to an archive table in batches and commits between batches.
+- **Triggers** that keep `spots_available` in step with bookings, maintain `updated_at`, reject bookings for full or started games, and write the outbox events.
+- **A materialized view of games per day**, refreshed by pg_cron, to put cheap counts on the date selector.
+- **Database tests with pgTAP**, so constraints, policies and functions are checked in CI.
+
+### Caching
+
+**In place:**
+- The JSON source loads once at startup.
+- The Supabase source keeps the whole dataset in memory for 15 seconds, separately in each API instance.
+- The app has an in-memory GraphQL cache but reads network-only, so spot counts are always fresh. That is deliberate, since stale availability is worse than a slower screen.
+- The agent fetches the reference date on every turn.
+
+**Next:**
+- **Response caching in the API** with graphql-yoga's response-cache plugin, keyed by query and variables and invalidated by game id when spots change.
+- **A shared cache such as Redis** once there is more than one API instance, because per-instance caches drift apart.
+- **CDN caching for list queries** by sending persisted queries as GET with a short `s-maxage` and `stale-while-revalidate`.
+- **Event-driven invalidation** from the outbox or Supabase Realtime instead of a fixed 15-second window.
+- **Cache-and-network in the app** with a persistent store, so screens open instantly from the last result, refresh in the background, and work offline.
+- **Never trust a cached spot count for a booking.** The `join_game` function re-checks inside its transaction.
+- **Agent**: cache the reference date for the day and reuse identical tool results within a conversation.
+
+### Security
+
+**In place:**
+- The API is read-only. It validates every input with clear errors and caps `first` at 500.
+- Every table has row-level security with no public policies, so the public Supabase key reads nothing. The service-role key only comes from the API's environment.
+- `.env` files are gitignored, and only empty templates are committed.
+- The agent can only call three read-only tools. Messages are capped at 2,000 characters and request bodies at 64 KB. The server issues session IDs as random UUIDs.
+- Android allows plain HTTP only in debug builds.
+
+**Next:**
+- **Authentication** with Supabase Auth, plus per-user row-level security policies once bookings exist.
+- **Least privilege**: the service-role key bypasses row-level security. A read-only role or a select-only policy for public game data should replace it.
+- **Rate limits** per IP and per session on `/graphql` and `/api/chat`. The chat comes first, because every message spends Gemini quota.
+- **GraphQL hardening**: depth and cost limits, a persisted-query allowlist, and masked errors in production. Today raw error messages go back to the caller, and GraphiQL and introspection are always on. Yoga's masking still lets the intentional validation messages through.
+- **Tighter CORS**: any origin can call the API today. Only the app's own origins should.
+- **Agent sessions**: expire idle sessions and cap history length, since the in-memory map grows without limit. Error replies should stop echoing raw exception text.
+- **Prompt-injection defense** if venue or organizer names ever become user-generated. Tool output stays data, and the reply guard from the agent section applies.
+- **Transport and headers**: HTTPS only, the iOS local-network exception limited to debug builds, and a Content-Security-Policy and HSTS on the chat page.
+- **Supply chain**: Dependabot, `npm audit` and GitHub secret scanning.
