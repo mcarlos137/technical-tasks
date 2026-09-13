@@ -32,10 +32,10 @@ The evaluator runs `npm install` and `flutter pub get` themselves, as described 
 - **Gemini key**: this lives in `barcelona/agent/.env`, which is gitignored. The default model is `gemini-flash-lite-latest`, whose free tier allows 15 requests a minute and 500 a day. `gemini-flash-latest` allows only 20 a day.
 - **Ports**:
   - API: `:4000`, with GraphiQL at `/graphql`.
-  - PostgreSQL: `:5433`, database `games`, user `games`.
+  - PostgreSQL (optional): `:5433`, database `games`, user `games`.
   - Agent chat: `:3001`.
   - Web build: `:8080`, served with `python3 -m http.server` from `barcelona/app/build/web`.
 - **Eval**: `cd barcelona/agent && npm run eval -- --report eval.md` needs the API running. It uses about 15 Gemini requests.
-- **Database**: local PostgreSQL 17 in Docker, started with `cd barcelona/api && docker compose up -d`, on port 5433. No Supabase.
+- **Database**: optional. By default the API serves `barcelona/api/data/games.json`, the mock data file the brief allows. PostgreSQL 17 in Docker (`cd barcelona/api && docker compose up -d`, port 5433) serves the same games when `DATABASE_URL` is set. No Supabase.
 - **Deployment** is not decided yet. Use personal accounts only.
 - **Access**: the repo has been public since 2026-09-13, including `docs/` and this file. Anything committed here is public, so keys stay in the gitignored `.env` files.

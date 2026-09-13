@@ -4,12 +4,12 @@ Two parts built on **one** small GraphQL API:
 
 | Folder | What | Stack |
 |---|---|---|
-| [`api/`](api) | Games GraphQL API over the mock data | Node 20+, TypeScript, graphql-yoga, PostgreSQL 17 (or the JSON file) |
+| [`api/`](api) | Games GraphQL API over the mock data | Node 20+, TypeScript, graphql-yoga; the JSON file, or PostgreSQL 17 (optional) |
 | [`app/`](app) | Explore home + Pick-up games list | Flutter 3.44.8, `graphql` client |
 | [`agent/`](agent) | Minimal chat agent with the API exposed as tools | Node 20+, Google Gemini (`@google/genai`) |
 
-The Flutter screens and the agent both read from the same API. The API reads the games from a local PostgreSQL database seeded from
-`api/data/games.json`, or from that JSON file directly when no database is configured.
+The Flutter screens and the agent both read from the same API, which serves the mock data file `api/data/games.json`, as the brief allows.
+**PostgreSQL is optional.** With `DATABASE_URL` set, the API serves the same games from a local database instead, and a parity test checks that both answer every query identically.
 
 > **Reference "today" in the mock data: Tuesday 25 August 2026, Europe/Madrid.**
 > The API exposes it as `referenceDate { today }`. The app labels "Today"/"Tomorrow" from it,
@@ -38,42 +38,23 @@ The API explorer is running the same "tomorrow morning" query the agent sends.
 
 ## How to run
 
-Run the parts in order: create the database, start the API, then run the app and the agent, which both call the API.
-Each block starts from this folder (`barcelona/`). The last command in steps 2, 3 and 4 keeps running, so give each of those steps its own terminal.
+No database is needed. The API serves the mock data file `api/data/games.json`, as the brief allows.
+Start the API first, then the app and the agent, which both call it.
+Each block starts from this folder (`barcelona/`). The last command in each step keeps running, so give each step its own terminal.
 
-### 1. Database (create it first)
-
-This step needs Docker:
-
-```bash
-cd api
-docker compose up -d --wait   # creates PostgreSQL 17 on 127.0.0.1:5433; database, user and password are all "games"
-docker compose exec db psql -U games -d games -c 'select count(*) from games'   # prints 19
-```
-
-On the first start, Postgres runs the two files in `api/db/migrations` in order:
-
-- `0001_games_schema.sql` creates the `venues`, `organizers` and `games` tables and enables the `unaccent` extension.
-- `0002_seed_games.sql` loads 5 venues, 6 organizers and 19 games.
-
-`docker compose down -v` deletes the database, so the next `up` creates it again.
-Any other PostgreSQL 14 or newer also works. Create an empty database, then run
-`psql "$DATABASE_URL" -f db/migrations/0001_games_schema.sql -f db/migrations/0002_seed_games.sql`.
-If you don't have Docker, skip this step and the `cp` line in step 2. With no `DATABASE_URL`, the API serves `data/games.json`, which holds the same data.
-
-### 2. API
+### 1. API
 
 ```bash
 cd api
 npm install
-cp .env.example .env          # DATABASE_URL points at the database from step 1
-npm test                      # filtering, validation and GraphiQL examples, plus PostgreSQL parity when DATABASE_URL is set
+npm test                      # filtering, validation and GraphiQL examples
 npm start                     # keeps running: http://localhost:4000/graphql  (GraphiQL opens with example queries)
 ```
 
-The startup log names the source: `PostgreSQL at localhost:5433/games` followed by `PostgreSQL connected: 19 games`.
+The startup log names the source: `Games API (source: data/games.json)`.
+To serve the same games from PostgreSQL instead, see [Optional: PostgreSQL instead of the JSON file](#optional-postgresql-instead-of-the-json-file).
 
-### 3. Flutter app
+### 2. Flutter app
 
 Install Flutter 3.44.8 first if you don't have it. A shallow clone of the release tag is the fastest route:
 
@@ -101,7 +82,7 @@ Pass `-d`: with several devices connected, a bare `flutter run` stops to ask whi
 The app calls `http://localhost:4000/graphql`, or `http://10.0.2.2:4000/graphql` on the Android emulator.
 Override it with `--dart-define=GAMES_API_URL=http://<host>:4000/graphql`, for example on a physical device.
 
-### 4. Agent
+### 3. Agent
 
 ```bash
 cd agent
@@ -112,7 +93,7 @@ npm run eval -- --report eval.md   # runs the 5 required conversations (6 cases)
 npm start            # keeps running: chat UI at http://localhost:3001
 ```
 
-The eval needs the API from step 2 but not the chat server. Run it once: each run spends about 12 free requests.
+The eval needs the API from step 1 but not the chat server. Run it once: each run spends about 12 free requests.
 Leave out `-- --report eval.md` to print the results without writing the file.
 
 The chat server starts without a key too. The chat then replies with setup instructions instead of calling the model.
@@ -129,6 +110,33 @@ These limits come from AI Studio's rate-limit page for this project on 13 Sep 20
 Each question costs about two requests, and one eval run about 12, so Flash's daily limit is used up after one or two runs.
 Set `GEMINI_MODEL=gemini-flash-latest` for the stronger model. The Gemini 2.5 models are already closed to new keys.
 [Free tier and request limits](#free-tier-and-request-limits) explains how the agent stays within these numbers.
+
+### Optional: PostgreSQL instead of the JSON file
+
+You can skip this. It serves the same 19 games from a local PostgreSQL database, and needs Docker.
+Stop the API from step 1, then:
+
+```bash
+cd api
+docker compose up -d --wait   # creates PostgreSQL 17 on 127.0.0.1:5433; database, user and password are all "games"
+docker compose exec db psql -U games -d games -c 'select count(*) from games'   # prints 19
+cp .env.example .env          # sets DATABASE_URL to that database
+npm test                      # now also runs the 2 PostgreSQL parity tests
+npm start                     # keeps running: same URL, same answers
+```
+
+The startup log then reads `Games API (source: PostgreSQL at localhost:5433/games)` followed by `PostgreSQL connected: 19 games`.
+The app and the agent need no change. Both sources return identical data, and the parity tests check that.
+
+On the first start, Postgres runs the two files in `api/db/migrations` in order:
+
+- `0001_games_schema.sql` creates the `venues`, `organizers` and `games` tables and enables the `unaccent` extension.
+- `0002_seed_games.sql` loads 5 venues, 6 organizers and 19 games.
+
+To go back to the JSON file, delete `api/.env` or leave `DATABASE_URL` empty in it, then restart the API.
+`docker compose down -v` deletes the database, so the next `up` creates it again.
+Any other PostgreSQL 14 or newer also works. Create an empty database, then run
+`psql "$DATABASE_URL" -f db/migrations/0001_games_schema.sql -f db/migrations/0002_seed_games.sql`.
 
 ---
 
@@ -164,7 +172,7 @@ The API is meant to be consumed by a language model, so it favors being **unambi
 6. **Derived state lives on the server.** `availability` is a closed enum of `URGENT`, `AVAILABLE` and `FULL`, computed from `spotsAvailable`, so the app and the agent can't disagree on the thresholds.
 7. **Forgiving where it is safe.** `venueName` matching ignores case and accents, so "aliga" finds "L'Àliga". `venueId` gives an exact match. Filters combine with AND.
 8. **Bounded and ordered.** Results are sorted by kick-off, and games that kick off together keep their listing order, as in the design screenshots. The `first` argument defaults to 100, capped at 500.
-9. **Read-only.** There are no mutations, and the database sessions are read-only, so a model driving the API cannot change anything.
+9. **Read-only.** There are no mutations, and with PostgreSQL the database sessions are read-only, so a model driving the API cannot change anything.
 
 ```graphql
 type Query {
@@ -190,7 +198,7 @@ Example:
     games { startTime venue { name } format spotsAvailable availability } } }
 ```
 
-**Data source.** The API reads a local PostgreSQL when `DATABASE_URL` is set, and `api/data/games.json` otherwise. Both hold the same 19 games, from 25 to 31 August, at 5 venues.
+**Data source.** By default the API serves `api/data/games.json`, the mock data file the brief allows. PostgreSQL is optional: the API reads it when `DATABASE_URL` is set. Both hold the same 19 games, from 25 to 31 August, at 5 venues.
 
 - **Schema and seed** live in `api/db/migrations`. `docker compose up -d` applies them to PostgreSQL 17, and `npm run seed:sql` regenerates the seed from the JSON.
 - **Filters run in SQL** with bound parameters.
@@ -375,7 +383,7 @@ Recorded on 2026-09-13 with `gemini-flash-lite-latest`, answered by `gemini-3.5-
 
 | Check | Result |
 |---|---|
-| API tests: filtering, validation, GraphiQL examples, PostgreSQL parity (`api`, `npm test`) | 13 passing. The 2 PostgreSQL tests skip when `DATABASE_URL` is unset |
+| API tests: filtering, validation, GraphiQL examples, PostgreSQL parity (`api`, `npm test`) | 11 passing on the JSON file, with the 2 PostgreSQL tests skipped. 13 passing with `DATABASE_URL` set |
 | Agent tests: date resolution, tool loop with a scripted model, quota handling, grounding check (`agent`, `npm test`) | 15 passing |
 | Flutter analyzer and tests (`app`, `flutter analyze`, `flutter test`) | 0 issues, 10 passing |
 | App on the iOS simulator against the live API | Both screens, "1+ spots", date jump, row detail and tab bar all work |
@@ -384,6 +392,7 @@ Recorded on 2026-09-13 with `gemini-flash-lite-latest`, answered by `gemini-3.5-
 | Agent tools called directly against the live API | Morning window, empty day, bad date and unknown id all return the expected structured data |
 | PostgreSQL 17 in Docker (`docker compose up -d --wait`) | Schema, `unaccent` and seed apply on first start. The seed re-runs safely, the counts match the JSON (5 venues, 6 organizers, 19 games), and date filters use `games_local_date_idx` |
 | API against PostgreSQL | 16 filters, all 19 games, the venues and the calendar match the JSON source exactly, and API sessions can't write. The app, GraphiQL and the agent also ran against it |
+| API in both modes from a fresh clone: the JSON file with no database, then PostgreSQL | The same queries return identical data, and both reject a relative date such as "tomorrow" with the same `BAD_USER_INPUT` error |
 | Agent against Gemini (`npm run eval`) | All 6 conversations pass on Gemini 3.5 Flash Lite, with every time, format, price, spot count and venue checked against the tool results. The transcript is in Part 2b |
 
 ---
