@@ -9,7 +9,11 @@ My workspace for take-home tasks. The deliverable is `barcelona/`, and its [READ
 
 ## Sharing `barcelona/` with the evaluator
 
-Don't zip the folder straight from disk. `barcelona/agent/.env` holds my Gemini API key, and the `node_modules` and Flutter build folders add hundreds of MB. Export only the committed files instead. Commit first, because this exports `HEAD`, not the working copy:
+The repo is public, so send this link. GitHub renders `barcelona/README.md` below the file list:
+
+https://github.com/mcarlos137/technical-tasks/tree/main/barcelona
+
+If they want a file instead, export a zip. Don't zip the folder straight from disk. `barcelona/agent/.env` holds my Gemini API key, and the `node_modules` and Flutter build folders add hundreds of MB. Export only the committed files instead. Commit first, because this exports `HEAD`, not the working copy:
 
 ```bash
 git archive --format=zip --prefix=barcelona/ -o ~/Desktop/barcelona.zip HEAD:barcelona
@@ -34,4 +38,4 @@ The evaluator runs `npm install` and `flutter pub get` themselves, as described 
 - **Eval**: `cd barcelona/agent && npm run eval -- --report eval.md` needs the API running. It uses about 15 Gemini requests.
 - **Database**: local PostgreSQL 17 in Docker, started with `cd barcelona/api && docker compose up -d`, on port 5433. No Supabase.
 - **Deployment** is not decided yet. Use personal accounts only.
-- **Access**: the repo stays private. The evaluator gets the zip, not repo access.
+- **Access**: the repo has been public since 2026-09-13, including `docs/` and this file. Anything committed here is public, so keys stay in the gitignored `.env` files.
