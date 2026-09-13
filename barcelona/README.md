@@ -15,11 +15,22 @@ The Flutter screens and the agent both read from the same API, which serves `api
 > and the agent resolves "tomorrow", "this weekend" and "on Thursday" against it.
 > Tomorrow is Wed 26 Aug. This weekend is Sat 29 to Sun 30 Aug. "On Thursday" is 27 Aug.
 
-| Explore home | Pick-up games |
-|---|---|
-| <img src="docs/screenshots/explore-home.png" width="280"> | <img src="docs/screenshots/pickup-games.png" width="280"> |
+| | Explore home | Pick-up games |
+|---|---|---|
+| **iOS simulator** | <img src="docs/screenshots/explore-home.png" width="260"> | <img src="docs/screenshots/pickup-games.png" width="260"> |
+| **Chrome, web build** | <img src="docs/screenshots/web-explore-home.png" width="260"> | <img src="docs/screenshots/web-pickup-games.png" width="260"> |
 
-The screenshots come from the iOS simulator on an iPhone 16 Pro, reading live from the local API.
+Every screenshot reads live from the local API. The iOS ones come from an iPhone 16 Pro simulator.
+The Chrome ones come from `flutter build web` in a phone-sized window.
+
+**Web pages**
+
+| Agent chat at `localhost:3001` | API explorer (GraphiQL) at `localhost:4000/graphql` |
+|---|---|
+| <img src="docs/screenshots/agent-chat.png" width="420"> | <img src="docs/screenshots/graphiql.png" width="420"> |
+
+The chat page is shown before any question, because a real conversation needs a Gemini key.
+The API explorer is running the same "tomorrow morning" query the agent sends.
 
 ---
 
@@ -52,6 +63,7 @@ Then run the app:
 cd app
 flutter pub get
 flutter run          # iOS simulator, Android emulator, Chrome or macOS
+flutter build web    # static site in build/web, which any static file server can serve
 flutter test         # widget + unit tests (no API needed, uses an in-memory fake)
 ```
 
@@ -173,6 +185,7 @@ The required conversations and what the data makes them test:
 | Agent tests: date resolution and tool loop with a scripted model (`agent`, `npm test`) | 8 passing |
 | Flutter analyzer and tests (`app`, `flutter analyze`, `flutter test`) | 0 issues, 10 passing |
 | App on the iOS simulator against the live API | Both screens, "1+ spots", date jump, row detail and tab bar all work |
+| App as a web build in headless Chrome against the live API | Both screens render with live data, and "See all" opens the list |
 | Agent tools called directly against the live API | Morning window, empty day, bad date and unknown id all return the expected structured data |
 | Supabase migrations on a throwaway Postgres 17 | Schema and seed apply, the seed re-runs safely, counts match the JSON |
 | Supabase read path in the API | Not run, because it needs a Supabase project |
@@ -192,4 +205,4 @@ The required conversations and what the data makes them test:
   - add a golden-set eval in CI with a pinned model,
   - consider exposing the schema to other agents through MCP.
 - **Auth and rate limiting** are omitted because the API is local and read-only. Before any public deployment it needs rate limits, and it needs auth if write operations ever arrive.
-- **Deployment** is deliberately left out until the hosting target is decided. The Supabase schema is ready. A serverless entry point for the API is a small addition once the platform is chosen.
+- **Deployment** is deliberately left out until the hosting target is decided. The Supabase schema is ready, and the Flutter web build is a static site that any static host can serve. A serverless entry point for the API is a small addition once the platform is chosen.
